@@ -7,14 +7,40 @@ type AdbStatus = {
   serverRunning: boolean;
   devices: number;
   error: string | null;
+  operation: string | null;
 };
 
-function run(cmd: string): Promise<{ stdout: string; stderr: string }> {
+type ExecResult = {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+};
+
+function run(cmd: string): Promise<ExecResult> {
   return new Promise((resolve) => {
-    exec(cmd, (err: Error | null, stdout: string, stderr: string) => {
-      resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-    });
+    exec(
+      cmd,
+      (
+        err: (Error & { code?: number | null }) | null,
+        stdout: string,
+        stderr: string,
+      ) => {
+        resolve({
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          code: err?.code ?? 0,
+        });
+      },
+    );
   });
+}
+
+async function isAdbServerListening(): Promise<boolean> {
+  const probe = await run(
+    'powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 5037 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) { \"LISTENING\" }"',
+  );
+
+  return probe.stdout.includes("LISTENING");
 }
 
 async function getAdbStatus(): Promise<AdbStatus> {
@@ -27,6 +53,7 @@ async function getAdbStatus(): Promise<AdbStatus> {
       serverRunning: false,
       devices: 0,
       error: "ADB not found in PATH",
+      operation: null,
     };
   }
 
@@ -34,25 +61,31 @@ async function getAdbStatus(): Promise<AdbStatus> {
   const versionMatch = versionLine.match(/Version\s+([\d.]+)/i);
   const versionStr = versionMatch ? versionMatch[1] : versionLine;
 
-  const devices = await run("adb devices");
-  const lines = devices.stdout
-    .split("\n")
-    .filter((l) => l.trim() && !l.startsWith("List"));
-  const deviceCount = lines.filter((l) => l.includes("\tdevice")).length;
+  const serverRunning = await isAdbServerListening();
+  let deviceCount = 0;
+  let deviceErrors = "";
+
+  if (serverRunning) {
+    const devices = await run("adb devices");
+    const lines = devices.stdout
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("List"));
+    deviceCount = lines.filter((l) => l.includes("\tdevice")).length;
+    deviceErrors = devices.stderr;
+  }
 
   const mismatch =
-    devices.stderr.includes("out of date") ||
-    devices.stderr.includes("doesn't match");
+    deviceErrors.includes("out of date") ||
+    deviceErrors.includes("doesn't match");
   const errorMsg = mismatch ? "ADB server version mismatch detected" : null;
 
   return {
     installed: true,
     version: versionStr,
-    serverRunning:
-      !devices.stderr.includes("cannot connect") &&
-      !devices.stderr.includes("refused"),
+    serverRunning,
     devices: deviceCount,
     error: errorMsg,
+    operation: null,
   };
 }
 
@@ -71,6 +104,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 class AdbZenViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
+  private _operation: string | null = null;
+  private readonly _logLines: Array<{ kind: string; text: string }> = [];
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -81,22 +116,22 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
 
     // Send status on load
     await this._sendStatus();
+    this._sendLogHistory();
 
     // Handle messages from webview
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.command) {
         case "start":
-          await run("adb start-server");
+          await this._startServer();
           break;
         case "kill":
-          await run("adb kill-server");
+          await this._killServer();
           break;
         case "restart":
-          await run("adb kill-server");
-          await new Promise<void>((r) => globalThis.setTimeout(r, 800));
-          await run("adb start-server");
+          await this._restartServer();
           break;
         case "refresh":
+          await this._sendStatus();
           break;
       }
       await this._sendStatus();
@@ -108,7 +143,119 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     const status = await getAdbStatus();
+    status.operation = this._operation;
     this._view.webview.postMessage({ command: "status", data: status });
+  }
+
+  private _postLog(kind: string, text: string) {
+    const entry = { kind, text };
+    this._logLines.push(entry);
+    if (this._logLines.length > 200) {
+      this._logLines.shift();
+    }
+
+    if (this._view) {
+      this._view.webview.postMessage({ command: "log", data: entry });
+    }
+  }
+
+  private _sendLogHistory() {
+    if (!this._view) {
+      return;
+    }
+
+    this._view.webview.postMessage({
+      command: "logHistory",
+      data: this._logLines,
+    });
+  }
+
+  private async _waitForServerState(shouldRun: boolean, timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if ((await isAdbServerListening()) === shouldRun) {
+        return;
+      }
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 200));
+    }
+  }
+
+  private async _startServer() {
+    this._operation = "starting";
+    this._postLog("command", "> adb start-server");
+    await this._sendStatus();
+
+    const result = await run("adb start-server");
+    if (result.stdout) {
+      this._postLog("output", result.stdout);
+    }
+    if (result.stderr) {
+      this._postLog("error", result.stderr);
+    }
+    if (result.code && result.code !== 0) {
+      this._postLog("error", `Command exited with code ${result.code}`);
+    }
+
+    await this._waitForServerState(true);
+    this._operation = null;
+  }
+
+  private async _killServer() {
+    this._operation = "stopping";
+    this._postLog("command", "> adb kill-server");
+    await this._sendStatus();
+
+    const result = await run("adb kill-server");
+    if (result.stdout) {
+      this._postLog("output", result.stdout);
+    }
+    if (result.stderr) {
+      this._postLog("error", result.stderr);
+    }
+    if (result.code && result.code !== 0) {
+      this._postLog("error", `Command exited with code ${result.code}`);
+    }
+
+    await this._waitForServerState(false);
+    this._operation = null;
+  }
+
+  private async _restartServer() {
+    this._operation = "restarting";
+    this._postLog("command", "> adb kill-server");
+    this._postLog("command", "> adb start-server");
+    await this._sendStatus();
+
+    const killResult = await run("adb kill-server");
+    if (killResult.stdout) {
+      this._postLog("output", killResult.stdout);
+    }
+    if (killResult.stderr) {
+      this._postLog("error", killResult.stderr);
+    }
+    if (killResult.code && killResult.code !== 0) {
+      this._postLog("error", `kill-server exited with code ${killResult.code}`);
+    }
+
+    await this._waitForServerState(false);
+
+    const startResult = await run("adb start-server");
+    if (startResult.stdout) {
+      this._postLog("output", startResult.stdout);
+    }
+    if (startResult.stderr) {
+      this._postLog("error", startResult.stderr);
+    }
+    if (startResult.code && startResult.code !== 0) {
+      this._postLog(
+        "error",
+        `start-server exited with code ${startResult.code}`,
+      );
+    }
+
+    await this._waitForServerState(true);
+    this._operation = null;
   }
 
   private _getHtml(): string {
@@ -281,11 +428,73 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
 
   .btn-icon { font-size: 13px; }
 
+  .status-tag {
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .status-tag.running {
+    background: rgba(78, 201, 78, 0.14);
+    color: #4ec94e;
+    border-color: rgba(78, 201, 78, 0.28);
+  }
+  .status-tag.stopped {
+    background: rgba(244, 71, 71, 0.1);
+    color: #f47878;
+    border-color: rgba(244, 71, 71, 0.26);
+  }
+  .status-tag.pending {
+    background: rgba(229, 162, 32, 0.14);
+    color: #e5a220;
+    border-color: rgba(229, 162, 32, 0.28);
+  }
+
   .divider {
     height: 1px;
     background: var(--vscode-widget-border, rgba(255,255,255,0.07));
     margin: 10px 0;
   }
+
+  .terminal-panel {
+    margin-top: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+  }
+
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .terminal-body {
+    max-height: 180px;
+    overflow: auto;
+    padding: 8px 10px;
+    font-family: var(--vscode-editor-font-family, Consolas, monospace);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .terminal-line { margin-bottom: 4px; }
+  .terminal-line.command { color: var(--vscode-foreground); }
+  .terminal-line.output { color: rgba(255, 255, 255, 0.82); }
+  .terminal-line.error { color: #f47878; }
 
   /* ── Loading skeleton ── */
   .skeleton {
@@ -340,6 +549,7 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       <div class="status-pill">
         <div class="dot" id="statusDot"></div>
         <span id="statusText"></span>
+        <span id="statusTag" class="status-tag hidden"></span>
       </div>
     </div>
     <div class="meta" id="metaBlock">
@@ -374,12 +584,42 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     </div>
   </div>
 
+  <div class="terminal-panel">
+    <div class="terminal-header">
+      <span>Command log</span>
+      <span id="terminalCount">0 lines</span>
+    </div>
+    <div class="terminal-body" id="terminalBody"></div>
+  </div>
+
 </div>
 
 <script>
   const vscode = acquireVsCodeApi();
 
   const $ = id => document.getElementById(id);
+  const terminalEntries = [];
+
+  function escapeHtml(text) {
+    return text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+  }
+
+  function renderTerminal() {
+    const body = $('terminalBody');
+    body.innerHTML = terminalEntries
+      .map(({ kind, text }) => '<div class="terminal-line ' + kind + '">' + escapeHtml(text) + '</div>')
+      .join('');
+    $('terminalCount').textContent = terminalEntries.length + ' line' + (terminalEntries.length === 1 ? '' : 's');
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function pushTerminal(kind, text) {
+    terminalEntries.push({ kind, text });
+    renderTerminal();
+  }
 
   function send(command) {
     const btn = $('refreshBtn');
@@ -393,6 +633,17 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
   $('btnRestart').addEventListener('click', () => send('restart'));
 
   window.addEventListener('message', ({ data }) => {
+    if (data.command === 'logHistory') {
+      terminalEntries.splice(0, terminalEntries.length, ...data.data);
+      renderTerminal();
+      return;
+    }
+
+    if (data.command === 'log') {
+      pushTerminal(data.data.kind, data.data.text);
+      return;
+    }
+
     if (data.command !== 'status') { return; }
     const s = data.data;
 
@@ -421,9 +672,30 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     // dot + status text
     const dot  = $('statusDot');
     const text = $('statusText');
+    const tag  = $('statusTag');
     dot.className = 'dot';
+    tag.className = 'status-tag hidden';
+    tag.textContent = '';
 
-    if (s.error) {
+    if (s.operation === 'restarting') {
+      dot.classList.add('amber');
+      text.textContent = 'Restarting server';
+      tag.classList.remove('hidden');
+      tag.textContent = 'Restarting';
+      tag.classList.add('pending');
+    } else if (s.operation === 'starting') {
+      dot.classList.add('amber');
+      text.textContent = 'Starting server';
+      tag.classList.remove('hidden');
+      tag.textContent = 'Starting';
+      tag.classList.add('pending');
+    } else if (s.operation === 'stopping') {
+      dot.classList.add('amber');
+      text.textContent = 'Stopping server';
+      tag.classList.remove('hidden');
+      tag.textContent = 'Stopping';
+      tag.classList.add('pending');
+    } else if (s.error) {
       dot.classList.add('amber');
       text.textContent = 'Degraded';
     } else if (s.serverRunning) {
