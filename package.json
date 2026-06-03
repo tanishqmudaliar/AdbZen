@@ -1,0 +1,50 @@
+{
+  "name": "adbzen",
+  "displayName": "AdbZen",
+  "description": "Wireless ADB manager for VS Code",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "adbzen-sidebar",
+          "title": "AdbZen",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "adbzen-sidebar": [
+        {
+          "type": "webview",
+          "id": "adbzen.mainView",
+          "name": "AdbZen"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "adbzen.openPanel",
+        "title": "AdbZen: Open Panel"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
