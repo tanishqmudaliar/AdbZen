@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { exec } from "child_process";
+import * as net from "net";
 
 type AdbStatus = {
   installed: boolean;
@@ -36,11 +37,25 @@ function run(cmd: string): Promise<ExecResult> {
 }
 
 async function isAdbServerListening(): Promise<boolean> {
-  const probe = await run(
-    'powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 5037 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) { \"LISTENING\" }"',
-  );
+  return await new Promise<boolean>((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
 
-  return probe.stdout.includes("LISTENING");
+    const finish = (value: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve(value);
+    };
+
+    socket.setTimeout(500);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+    socket.connect(5037, "127.0.0.1");
+  });
 }
 
 async function getAdbStatus(): Promise<AdbStatus> {
@@ -133,6 +148,10 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
         case "refresh":
           await this._sendStatus();
           break;
+        case "clearLog":
+          this._logLines.length = 0;
+          this._sendLogHistory();
+          break;
       }
       await this._sendStatus();
     });
@@ -170,15 +189,20 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async _waitForServerState(shouldRun: boolean, timeoutMs = 5000) {
+  private async _waitForServerState(
+    shouldRun: boolean,
+    timeoutMs = 5000,
+  ): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       if ((await isAdbServerListening()) === shouldRun) {
-        return;
+        return true;
       }
       await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 200));
     }
+
+    return false;
   }
 
   private async _startServer() {
@@ -197,7 +221,13 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       this._postLog("error", `Command exited with code ${result.code}`);
     }
 
-    await this._waitForServerState(true);
+    const started = await this._waitForServerState(true);
+    this._postLog(
+      started ? "output" : "error",
+      started
+        ? "ADB server is running"
+        : "ADB server did not report as running in time",
+    );
     this._operation = null;
   }
 
@@ -217,16 +247,19 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       this._postLog("error", `Command exited with code ${result.code}`);
     }
 
-    await this._waitForServerState(false);
+    const stopped = await this._waitForServerState(false);
+    this._postLog(
+      stopped ? "output" : "error",
+      stopped ? "ADB server is stopped" : "ADB server did not stop in time",
+    );
     this._operation = null;
   }
 
   private async _restartServer() {
     this._operation = "restarting";
-    this._postLog("command", "> adb kill-server");
-    this._postLog("command", "> adb start-server");
     await this._sendStatus();
 
+    this._postLog("command", "> adb kill-server");
     const killResult = await run("adb kill-server");
     if (killResult.stdout) {
       this._postLog("output", killResult.stdout);
@@ -238,8 +271,13 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       this._postLog("error", `kill-server exited with code ${killResult.code}`);
     }
 
-    await this._waitForServerState(false);
+    const stopped = await this._waitForServerState(false);
+    this._postLog(
+      stopped ? "output" : "error",
+      stopped ? "ADB server is stopped" : "ADB server did not stop in time",
+    );
 
+    this._postLog("command", "> adb start-server");
     const startResult = await run("adb start-server");
     if (startResult.stdout) {
       this._postLog("output", startResult.stdout);
@@ -254,7 +292,13 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       );
     }
 
-    await this._waitForServerState(true);
+    const started = await this._waitForServerState(true);
+    this._postLog(
+      started ? "output" : "error",
+      started
+        ? "ADB server restarted successfully"
+        : "ADB server restart did not finish in time",
+    );
     this._operation = null;
   }
 
@@ -273,16 +317,6 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     background: transparent;
     padding: 12px;
   }
-
-  /* ── Header ── */
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .header-left { display: flex; align-items: center; gap: 8px; }
-  .title { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; opacity: 0.85; text-transform: uppercase; }
 
   .refresh-btn {
     background: none;
@@ -480,8 +514,29 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     opacity: 0.7;
   }
 
+  .terminal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .clear-log-btn {
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+    background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.05));
+    color: var(--vscode-foreground);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .clear-log-btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.1));
+  }
+
   .terminal-body {
-    max-height: 180px;
+    height: calc(6 * 1.5em + 16px);
     overflow: auto;
     padding: 8px 10px;
     font-family: var(--vscode-editor-font-family, Consolas, monospace);
@@ -512,13 +567,6 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
 </style>
 </head>
 <body>
-
-<div class="header">
-  <div class="header-left">
-    <span class="title">AdbZen</span>
-  </div>
-  <button class="refresh-btn" id="refreshBtn" title="Refresh status">↻</button>
-</div>
 
 <!-- Loading state -->
 <div id="loading">
@@ -551,6 +599,7 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
         <span id="statusText"></span>
         <span id="statusTag" class="status-tag hidden"></span>
       </div>
+      <button class="refresh-btn" id="refreshBtn" title="Refresh status">↻</button>
     </div>
     <div class="meta" id="metaBlock">
       <div class="meta-row">
@@ -587,7 +636,10 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
   <div class="terminal-panel">
     <div class="terminal-header">
       <span>Command log</span>
-      <span id="terminalCount">0 lines</span>
+      <div class="terminal-actions">
+        <span id="terminalCount">0 lines</span>
+        <button class="clear-log-btn" id="clearLogBtn" title="Clear command log">Clear</button>
+      </div>
     </div>
     <div class="terminal-body" id="terminalBody"></div>
   </div>
@@ -627,7 +679,12 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     vscode.postMessage({ command });
   }
 
+  function clearLog() {
+    vscode.postMessage({ command: 'clearLog' });
+  }
+
   $('refreshBtn').addEventListener('click', () => send('refresh'));
+  $('clearLogBtn').addEventListener('click', () => clearLog());
   $('btnStart').addEventListener('click',   () => send('start'));
   $('btnKill').addEventListener('click',    () => send('kill'));
   $('btnRestart').addEventListener('click', () => send('restart'));
@@ -679,19 +736,19 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
 
     if (s.operation === 'restarting') {
       dot.classList.add('amber');
-      text.textContent = 'Restarting server';
+      text.textContent = 'Restarting Server';
       tag.classList.remove('hidden');
       tag.textContent = 'Restarting';
       tag.classList.add('pending');
     } else if (s.operation === 'starting') {
       dot.classList.add('amber');
-      text.textContent = 'Starting server';
+      text.textContent = 'Starting Server';
       tag.classList.remove('hidden');
       tag.textContent = 'Starting';
       tag.classList.add('pending');
     } else if (s.operation === 'stopping') {
       dot.classList.add('amber');
-      text.textContent = 'Stopping server';
+      text.textContent = 'Stopping Server';
       tag.classList.remove('hidden');
       tag.textContent = 'Stopping';
       tag.classList.add('pending');
@@ -700,10 +757,10 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
       text.textContent = 'Degraded';
     } else if (s.serverRunning) {
       dot.classList.add('green');
-      text.textContent = 'Server running';
+      text.textContent = 'Server Running';
     } else {
       dot.classList.add('red');
-      text.textContent = 'Server stopped';
+      text.textContent = 'Server Stopped';
     }
 
     // meta
@@ -719,9 +776,9 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     dev.className   = 'meta-value ' + (s.devices > 0 ? 'ok' : '');
 
     // toggle start button — hide if already running
-    $('btnStart').disabled    = s.serverRunning;
-    $('btnKill').disabled     = !s.serverRunning;
-    $('btnRestart').disabled  = false;
+    $('btnStart').disabled    = s.serverRunning || Boolean(s.operation);
+    $('btnKill').disabled     = !s.serverRunning || Boolean(s.operation);
+    $('btnRestart').disabled  = !s.serverRunning || Boolean(s.operation);
   });
 </script>
 </body>
