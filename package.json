@@ -9,7 +9,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -26,7 +25,14 @@
         {
           "type": "webview",
           "id": "adbzen.mainView",
-          "name": "AdbZen"
+          "name": "AdbZen",
+          "icon": "media/icon.svg"
+        },
+        {
+          "type": "webview",
+          "id": "adbzen.wirelessView",
+          "name": "Wireless Pairing",
+          "icon": "media/icon.svg"
         }
       ]
     },
@@ -44,7 +50,12 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
+    "@types/qrcode": "^1.5.6",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.1",
+    "qrcode": "^1.5.4"
   }
 }
