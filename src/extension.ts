@@ -4,22 +4,18 @@ import { getAdbZenHtml } from "./webview.js";
 import { WirelessViewProvider } from "./wireless.js";
 
 export function activate(context: vscode.ExtensionContext) {
-  const provider = new AdbZenViewProvider();
-  const wirelessProvider = new WirelessViewProvider();
-
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("adbzen.mainView", provider),
-  );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
-      "adbzen.wirelessView",
-      wirelessProvider,
+      "adbzen.mainView",
+      new AdbZenViewProvider(),
     ),
-  );
-  context.subscriptions.push(
-    vscode.commands.registerCommand("adbzen.openPanel", () => {
-      vscode.commands.executeCommand("workbench.view.extension.adbzen-sidebar");
-    }),
+    vscode.window.registerWebviewViewProvider(
+      "adbzen.wirelessView",
+      new WirelessViewProvider(),
+    ),
+    vscode.commands.registerCommand("adbzen.openPanel", () =>
+      vscode.commands.executeCommand("workbench.view.extension.adbzen-sidebar"),
+    ),
   );
 }
 
@@ -31,13 +27,10 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
   async resolveWebviewView(webviewView: vscode.WebviewView) {
     this._view = webviewView;
     webviewView.webview.options = { enableScripts: true };
-    webviewView.webview.html = this._getHtml();
-
-    // Send status on load
+    webviewView.webview.html = getAdbZenHtml();
     await this._sendStatus();
     this._sendLogHistory();
 
-    // Handle messages from webview
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.command) {
         case "start":
@@ -57,7 +50,6 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
           this._sendLogHistory();
           break;
       }
-      await this._sendStatus();
     });
   }
 
@@ -70,144 +62,96 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     this._view.webview.postMessage({ command: "status", data: status });
   }
 
-  private _postLog(kind: string, text: string) {
-    const entry = { kind, text };
-    this._logLines.push(entry);
+  private _log(kind: string, text: string) {
+    this._logLines.push({ kind, text });
     if (this._logLines.length > 200) {
       this._logLines.shift();
     }
-
-    if (this._view) {
-      this._view.webview.postMessage({ command: "log", data: entry });
-    }
+    this._view?.webview.postMessage({ command: "log", data: { kind, text } });
   }
 
   private _sendLogHistory() {
-    if (!this._view) {
-      return;
-    }
-
-    this._view.webview.postMessage({
+    this._view?.webview.postMessage({
       command: "logHistory",
       data: this._logLines,
     });
   }
 
   private async _waitForServerState(
-    shouldRun: boolean,
-    timeoutMs = 5000,
+    target: boolean,
+    ms = 5000,
   ): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs;
-
+    const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
-      if ((await isAdbServerListening()) === shouldRun) {
+      if ((await isAdbServerListening()) === target) {
         return true;
       }
-      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 200));
+      await new Promise<void>((r) => globalThis.setTimeout(r, 200));
     }
-
     return false;
+  }
+
+  /** Run a shell command, log cmd/stdout/stderr, return result. */
+  private async _exec(cmd: string) {
+    this._log("command", `> ${cmd}`);
+    const r = await run(cmd);
+    if (r.stdout) {
+      this._log("output", r.stdout);
+    }
+    if (r.stderr) {
+      this._log("error", r.stderr);
+    }
+    if (r.code && r.code !== 0) {
+      this._log("error", `Exited with code ${r.code}`);
+    }
+    return r;
   }
 
   private async _startServer() {
     this._operation = "starting";
-    this._postLog("command", "> adb start-server");
     await this._sendStatus();
-
-    const result = await run("adb start-server");
-    if (result.stdout) {
-      this._postLog("output", result.stdout);
-    }
-    if (result.stderr) {
-      this._postLog("error", result.stderr);
-    }
-    if (result.code && result.code !== 0) {
-      this._postLog("error", `Command exited with code ${result.code}`);
-    }
-
-    const started = await this._waitForServerState(true);
-    this._postLog(
-      started ? "output" : "error",
-      started
-        ? "ADB server is running"
-        : "ADB server did not report as running in time",
+    await this._exec("adb start-server");
+    const ok = await this._waitForServerState(true);
+    this._log(
+      ok ? "output" : "error",
+      ok ? "ADB server is running" : "Server did not start in time",
     );
     this._operation = null;
+    await this._sendStatus();
   }
 
   private async _killServer() {
     this._operation = "stopping";
-    this._postLog("command", "> adb kill-server");
     await this._sendStatus();
-
-    const result = await run("adb kill-server");
-    if (result.stdout) {
-      this._postLog("output", result.stdout);
-    }
-    if (result.stderr) {
-      this._postLog("error", result.stderr);
-    }
-    if (result.code && result.code !== 0) {
-      this._postLog("error", `Command exited with code ${result.code}`);
-    }
-
-    const stopped = await this._waitForServerState(false);
-    this._postLog(
-      stopped ? "output" : "error",
-      stopped ? "ADB server is stopped" : "ADB server did not stop in time",
+    await this._exec("adb kill-server");
+    const ok = await this._waitForServerState(false);
+    this._log(
+      ok ? "output" : "error",
+      ok ? "ADB server is stopped" : "Server did not stop in time",
     );
     this._operation = null;
+    await this._sendStatus();
   }
 
   private async _restartServer() {
     this._operation = "restarting";
     await this._sendStatus();
-
-    this._postLog("command", "> adb kill-server");
-    const killResult = await run("adb kill-server");
-    if (killResult.stdout) {
-      this._postLog("output", killResult.stdout);
-    }
-    if (killResult.stderr) {
-      this._postLog("error", killResult.stderr);
-    }
-    if (killResult.code && killResult.code !== 0) {
-      this._postLog("error", `kill-server exited with code ${killResult.code}`);
-    }
-
+    await this._exec("adb kill-server");
     const stopped = await this._waitForServerState(false);
-    this._postLog(
+    this._log(
       stopped ? "output" : "error",
-      stopped ? "ADB server is stopped" : "ADB server did not stop in time",
+      stopped ? "Server stopped" : "Server did not stop in time",
     );
-
-    this._postLog("command", "> adb start-server");
-    const startResult = await run("adb start-server");
-    if (startResult.stdout) {
-      this._postLog("output", startResult.stdout);
-    }
-    if (startResult.stderr) {
-      this._postLog("error", startResult.stderr);
-    }
-    if (startResult.code && startResult.code !== 0) {
-      this._postLog(
-        "error",
-        `start-server exited with code ${startResult.code}`,
-      );
-    }
-
+    await this._exec("adb start-server");
     const started = await this._waitForServerState(true);
-    this._postLog(
+    this._log(
       started ? "output" : "error",
       started
         ? "ADB server restarted successfully"
-        : "ADB server restart did not finish in time",
+        : "Server restart did not finish in time",
     );
     this._operation = null;
-  }
-
-  private _getHtml(): string {
-    return getAdbZenHtml();
+    await this._sendStatus();
   }
 }
 

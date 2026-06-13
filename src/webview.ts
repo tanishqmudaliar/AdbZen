@@ -1,92 +1,3 @@
-import type { AdbConnectionType, AdbDevice, AdbDeviceState } from "./adb.js";
-
-function escapeHtml(text: string | null | undefined): string {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function stateLabel(state: AdbDeviceState): string {
-  switch (state) {
-    case "device":
-      return "Connected";
-    case "unauthorized":
-      return "Unauthorized";
-    case "offline":
-      return "Offline";
-    case "recovery":
-      return "Recovery";
-    case "bootloader":
-      return "Bootloader";
-    case "sideload":
-      return "Sideload";
-    default:
-      return "Unknown";
-  }
-}
-
-function stateTone(state: AdbDeviceState): string {
-  if (state === "device") {
-    return "ok";
-  }
-
-  if (state === "unauthorized") {
-    return "warn";
-  }
-
-  return "error";
-}
-
-function connectionLabel(connectionType: AdbConnectionType): string {
-  switch (connectionType) {
-    case "usb":
-      return "USB";
-    case "wireless":
-      return "Wireless";
-    case "emulator":
-      return "Emulator";
-    default:
-      return "Unknown";
-  }
-}
-
-function deviceCard(device: AdbDevice): string {
-  const detailRows = [
-    ["Serial number", device.serial],
-    ["Name / model", device.model],
-    ["Product", device.product],
-    ["Codename", device.device],
-    ["State", stateLabel(device.state)],
-    ["Connection", connectionLabel(device.connectionType)],
-    ["USB info", device.usb],
-    ["Features", device.features],
-  ]
-    .filter(([, value]) => Boolean(value))
-    .map(([label, value]) => {
-      const safeValue = value ?? "";
-      return `<div class="detail-row"><span class="detail-label">${escapeHtml(label)}</span><span class="detail-value">${escapeHtml(safeValue)}</span></div>`;
-    });
-
-  return [
-    `<div class="device-card ${stateTone(device.state)}">`,
-    '<div class="device-head">',
-    '<div class="device-head-left">',
-    `<div class="device-title">Serial number: <span>${escapeHtml(device.serial)}</span></div>`,
-    `<div class="device-subtitle">Name / model: <span>${escapeHtml(device.model ?? "-")}</span></div>`,
-    `<div class="device-subtitle">Product: <span>${escapeHtml(device.product ?? "-")}</span></div>`,
-    `<div class="device-subtitle">Codename: <span>${escapeHtml(device.device ?? "-")}</span></div>`,
-    `</div>`,
-    `<div class="device-badges">`,
-    `<span class="pill ${stateTone(device.state)} status-pill-top">${escapeHtml(stateLabel(device.state))}</span>`,
-    "</div>",
-    "</div>",
-    `<div class="device-meta">${detailRows.join("")}</div>`,
-    "</div>",
-  ].join("");
-}
-
 export function getAdbZenHtml(): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -153,7 +64,7 @@ export function getAdbZenHtml(): string {
   .dot.red    { background: #f44747; box-shadow: 0 0 5px #f4474788; }
   .dot.amber  { background: #e5a220; box-shadow: 0 0 5px #e5a22088; }
 
-  .meta { display: flex; flex-direction: column; gap: 5px; }
+  .meta { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
   .meta-row {
     display: flex;
     justify-content: space-between;
@@ -258,46 +169,40 @@ export function getAdbZenHtml(): string {
     border-color: rgba(229, 162, 32, 0.28);
   }
 
-  .device-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
+  /* ── Device cards ── */
+  .device-list { display: flex; flex-direction: column; gap: 8px; }
   .device-card {
     border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
     border-radius: 8px;
     padding: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    width: 100%;
+    background: rgba(255,255,255,0.03);
   }
-  .device-card.ok { border-color: rgba(78, 201, 78, 0.22); }
+  .device-card.ok   { border-color: rgba(78, 201, 78, 0.22); }
   .device-card.warn { border-color: rgba(229, 162, 32, 0.22); }
-  .device-card.error { border-color: rgba(244, 71, 71, 0.22); }
+  .device-card.error{ border-color: rgba(244, 71, 71, 0.22); }
+
   .device-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 6px;
     margin-bottom: 8px;
   }
-  .device-body {
-    display: grid;
-    gap: 3px;
-  }
-  .device-head-left {
-    display: grid;
-    gap: 3px;
-    min-width: 0;
-  }
-  .device-title {
+  .device-badges { display: flex; gap: 5px; flex-shrink: 0; }
+  .device-body { display: grid; gap: 3px; }
+  .device-serial {
     font-size: 12px;
     font-weight: 700;
-    line-height: 1.35;
-    word-break: break-word;
+    word-break: break-all;
   }
-  .device-title span,
-  .detail-value {
-    font-weight: 600;
+  .device-subtitle {
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 1px;
   }
+  .detail-label { opacity: 0.48; }
+  .detail-value { font-weight: 600; }
+
   .pill {
     padding: 2px 7px;
     border-radius: 999px;
@@ -306,6 +211,7 @@ export function getAdbZenHtml(): string {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     border: 1px solid transparent;
+    white-space: nowrap;
   }
   .pill.ok {
     color: #4ec94e;
@@ -332,32 +238,16 @@ export function getAdbZenHtml(): string {
     background: rgba(255,255,255,0.06);
     border-color: rgba(255,255,255,0.14);
   }
-  .status-pill-top {
-    align-self: flex-start;
-    justify-self: flex-end;
-    white-space: nowrap;
-  }
+
   .device-meta {
-    margin-top: 3px;
+    margin-top: 6px;
     display: grid;
     gap: 3px;
-  }
-  .detail-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
     font-size: 11px;
     line-height: 1.4;
+    opacity: 0.8;
   }
-  .detail-label {
-    opacity: 0.48;
-    flex-shrink: 0;
-  }
-  .detail-value {
-    text-align: right;
-    word-break: break-word;
-    opacity: 0.92;
-  }
+
   .empty-state {
     padding: 12px;
     border-radius: 8px;
@@ -367,14 +257,14 @@ export function getAdbZenHtml(): string {
     opacity: 0.75;
   }
 
+  /* ── Terminal ── */
   .terminal-panel {
     margin-top: 10px;
     border-radius: 8px;
     border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0,0,0,0.18);
     overflow: hidden;
   }
-
   .terminal-header {
     padding: 8px 10px;
     border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
@@ -382,14 +272,11 @@ export function getAdbZenHtml(): string {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     opacity: 0.7;
-  }
-
-  .terminal-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
   }
-
+  .terminal-actions { display: flex; align-items: center; gap: 8px; }
   .clear-log-btn {
     border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
     background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.05));
@@ -401,10 +288,7 @@ export function getAdbZenHtml(): string {
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .clear-log-btn:hover {
-    background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.1));
-  }
-
+  .clear-log-btn:hover { background: rgba(255,255,255,0.1); }
   .terminal-body {
     height: calc(6 * 1.5em + 16px);
     overflow: auto;
@@ -415,11 +299,10 @@ export function getAdbZenHtml(): string {
     white-space: pre-wrap;
     word-break: break-word;
   }
-
   .terminal-line { margin-bottom: 4px; }
   .terminal-line.command { color: var(--vscode-foreground); }
-  .terminal-line.output { color: rgba(255, 255, 255, 0.82); }
-  .terminal-line.error { color: #f47878; }
+  .terminal-line.output  { color: rgba(255,255,255,0.82); }
+  .terminal-line.error   { color: #f47878; }
 
   .skeleton {
     height: 12px;
@@ -427,10 +310,7 @@ export function getAdbZenHtml(): string {
     background: var(--vscode-widget-border, rgba(255,255,255,0.07));
     animation: shimmer 1.4s infinite;
   }
-  @keyframes shimmer {
-    0%,100% { opacity: 0.4; }
-    50%      { opacity: 0.9; }
-  }
+  @keyframes shimmer { 0%,100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 </style>
 </head>
 <body>
@@ -444,17 +324,11 @@ export function getAdbZenHtml(): string {
 
 <div id="main" class="hidden">
   <div id="errorBanner" class="banner error-banner hidden">
-    <span>⚠</span>
-    <span id="errorText"></span>
-  </div>
-
-  <div id="deviceWarning" class="banner warn-banner hidden">
-    <span>!</span>
-    <span id="deviceWarningText"></span>
+    <span>⚠</span><span id="errorText"></span>
   </div>
 
   <div id="notInstalled" class="banner warn-banner hidden">
-    ADB not found in PATH. Install Android Platform Tools and ensure adb is accessible from your terminal.
+    ADB not found in PATH. Install Android Platform Tools and ensure <code>adb</code> is accessible from your terminal.
   </div>
 
   <div class="card" id="statusCard">
@@ -489,9 +363,9 @@ export function getAdbZenHtml(): string {
   <div id="actionsBlock">
     <div class="section-label">Server control</div>
     <div class="actions">
-      <button class="btn btn-primary" id="btnStart"><span class="btn-icon">▶</span> Start server</button>
-      <button class="btn btn-neutral" id="btnRestart"><span class="btn-icon">↻</span> Restart server</button>
-      <button class="btn btn-danger" id="btnKill"><span class="btn-icon">■</span> Kill server</button>
+      <button class="btn btn-primary"  id="btnStart"><span class="btn-icon">▶</span> Start server</button>
+      <button class="btn btn-neutral"  id="btnRestart"><span class="btn-icon">↻</span> Restart server</button>
+      <button class="btn btn-danger"   id="btnKill"><span class="btn-icon">■</span> Kill server</button>
     </div>
   </div>
 
@@ -500,7 +374,7 @@ export function getAdbZenHtml(): string {
       <span>Command log</span>
       <div class="terminal-actions">
         <span id="terminalCount">0 lines</span>
-        <button class="clear-log-btn" id="clearLogBtn" title="Clear command log">Clear</button>
+        <button class="clear-log-btn" id="clearLogBtn">Clear</button>
       </div>
     </div>
     <div class="terminal-body" id="terminalBody"></div>
@@ -510,15 +384,12 @@ export function getAdbZenHtml(): string {
 <script>
   const vscode = acquireVsCodeApi();
   const terminalEntries = [];
-
   const $ = (id) => document.getElementById(id);
 
   function escapeHtml(text) {
     return String(text)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;');
+      .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
   }
 
   function renderTerminal() {
@@ -530,65 +401,56 @@ export function getAdbZenHtml(): string {
     body.scrollTop = body.scrollHeight;
   }
 
-  function pushTerminal(kind, text) {
-    terminalEntries.push({ kind, text });
-    renderTerminal();
-  }
-
   function send(command, spinning) {
-    if (spinning) {
-      $('refreshBtn').classList.add('spinning');
-    }
+    if (spinning) { $('refreshBtn').classList.add('spinning'); }
     vscode.postMessage({ command });
   }
 
-  function clearLog() {
-    vscode.postMessage({ command: 'clearLog' });
-  }
-
-  function countBy(devices, predicate) {
-    return devices.filter(predicate).length;
-  }
+  function countBy(devices, pred) { return devices.filter(pred).length; }
 
   function renderDevices(devices) {
-    $('deviceList').innerHTML = devices.length ? devices.map((device) => {
-      const connectionLabel = device.connectionType === 'usb' ? 'USB' : device.connectionType === 'wireless' ? 'Wireless' : device.connectionType === 'emulator' ? 'Emulator' : 'Unknown';
-      const stateLabel = device.state === 'device' ? 'Connected' : device.state === 'unauthorized' ? 'Unauthorized' : device.state === 'offline' ? 'Offline' : device.state;
-      // State badge top-right, connection badge bottom-right
-      const stateBadge = '<span class="pill ' + (device.state === 'device' ? 'ok' : device.state === 'unauthorized' ? 'warn' : 'error') + '">' + escapeHtml(stateLabel) + '</span>';
-      const connBadge = '<span class="pill ' + (device.connectionType === 'usb' ? 'ok' : device.connectionType === 'wireless' ? 'amber' : 'neutral') + '">' + escapeHtml(connectionLabel) + '</span>';
+    if (!devices.length) {
+      $('deviceList').innerHTML = '<div class="empty-state">No adb devices detected yet. Connect a phone via USB with USB debugging enabled, or use wireless pairing.</div>';
+      return;
+    }
 
-      const subtitleLines = [];
-      if (device.model) { subtitleLines.push('<div class="device-subtitle"><span class="detail-label">Model: </span>' + escapeHtml(device.model) + '</div>'); }
-      if (device.product) { subtitleLines.push('<div class="device-subtitle"><span class="detail-label">Product: </span>' + escapeHtml(device.product) + '</div>'); }
+    $('deviceList').innerHTML = devices.map((d) => {
+      const stateTone = d.state === 'device' ? 'ok' : d.state === 'unauthorized' ? 'warn' : 'error';
+      const stateLabel = d.state === 'device' ? 'Connected' : d.state === 'unauthorized' ? 'Unauthorized' : d.state === 'offline' ? 'Offline' : d.state;
+      const connTone  = d.connectionType === 'usb' ? 'ok' : d.connectionType === 'wireless' ? 'amber' : 'neutral';
+      const connLabel = d.connectionType === 'usb' ? 'USB' : d.connectionType === 'wireless' ? 'Wireless' : d.connectionType === 'emulator' ? 'Emulator' : 'Unknown';
 
-      const details = [];
-      if (device.device) { details.push('<span><span class="detail-label">Codename: </span>' + escapeHtml(device.device) + '</span>'); }
-      if (device.usb) { details.push('<span><span class="detail-label">USB ID: </span>' + escapeHtml(device.usb) + '</span>'); }
-      if (device.features) { details.push('<span><span class="detail-label">Features: </span>' + escapeHtml(device.features) + '</span>'); }
+      const subtitles = [
+        d.model   ? '<div class="device-subtitle"><span class="detail-label">Model: </span>' + escapeHtml(d.model) + '</div>' : '',
+        d.product ? '<div class="device-subtitle"><span class="detail-label">Product: </span>' + escapeHtml(d.product) + '</div>' : '',
+      ].join('');
 
-      return '<div class="device-card ' + (device.state === 'device' ? 'ok' : device.state === 'unauthorized' ? 'warn' : 'error') + '">' +
+      const metas = [
+        d.device   ? '<div><span class="detail-label">Codename: </span>' + escapeHtml(d.device) + '</div>' : '',
+        d.usb      ? '<div><span class="detail-label">USB ID: </span>' + escapeHtml(d.usb) + '</div>' : '',
+        d.features ? '<div><span class="detail-label">Features: </span>' + escapeHtml(d.features) + '</div>' : '',
+      ].filter(Boolean).join('');
+
+      return '<div class="device-card ' + stateTone + '">' +
         '<div class="device-head">' +
-          stateBadge +
-          connBadge +
+          '<div class="device-body">' +
+            '<div class="device-serial">' + escapeHtml(d.serial) + '</div>' +
+            subtitles +
+          '</div>' +
+          '<div class="device-badges">' +
+            '<span class="pill ' + stateTone + '">' + escapeHtml(stateLabel) + '</span>' +
+            '<span class="pill ' + connTone  + '">' + escapeHtml(connLabel)  + '</span>' +
+          '</div>' +
         '</div>' +
-        '<div class="device-body">' +
-          '<div class="device-serial"><span class="detail-label">Serial: </span>' + escapeHtml(device.serial) + '</div>' +
-          subtitleLines.join('') +
-        '</div>' +
-        (details.length ? '<div class="device-meta">' + details.join('') + '</div>' : '') +
+        (metas ? '<div class="device-meta">' + metas + '</div>' : '') +
       '</div>';
-    }).join('') : '<div class="empty-state">No adb devices detected yet. Connect a phone via USB with USB debugging enabled, or use wireless pairing.</div>';
-  }
-
-  function updateDeviceSummary(devices) {
-    $('deviceCountText').textContent = devices.length ? devices.length + ' device' + (devices.length === 1 ? '' : 's') + ' detected' : 'No devices';
+    }).join('');
   }
 
   $('refreshBtn').addEventListener('click', () => send('refresh', true));
-  $('clearLogBtn').addEventListener('click', () => clearLog());
-  $('btnStart').addEventListener('click', () => send('start', false));
-  $('btnKill').addEventListener('click', () => send('kill', false));
+  $('clearLogBtn').addEventListener('click', () => { vscode.postMessage({ command: 'clearLog' }); });
+  $('btnStart').addEventListener('click',   () => send('start',   false));
+  $('btnKill').addEventListener('click',    () => send('kill',    false));
   $('btnRestart').addEventListener('click', () => send('restart', false));
 
   setInterval(() => send('refresh', false), 3500);
@@ -599,15 +461,13 @@ export function getAdbZenHtml(): string {
       renderTerminal();
       return;
     }
-
     if (data.command === 'log') {
-      pushTerminal(data.data.kind, data.data.text);
+      terminalEntries.push(data.data);
+      if (terminalEntries.length > 200) { terminalEntries.shift(); }
+      renderTerminal();
       return;
     }
-
-    if (data.command !== 'status') {
-      return;
-    }
+    if (data.command !== 'status') { return; }
 
     const s = data.data;
     const devices = Array.isArray(s.devices) ? s.devices : [];
@@ -622,7 +482,6 @@ export function getAdbZenHtml(): string {
 
     if (!s.installed) {
       $('errorBanner').classList.add('hidden');
-      $('deviceWarning').classList.add('hidden');
       return;
     }
 
@@ -633,30 +492,20 @@ export function getAdbZenHtml(): string {
       $('errorBanner').classList.add('hidden');
     }
 
-    const dot = $('statusDot');
+    const dot  = $('statusDot');
     const text = $('statusText');
-    const tag = $('statusTag');
+    const tag  = $('statusTag');
     dot.className = 'dot';
     tag.className = 'status-tag hidden';
     tag.textContent = '';
 
-    if (s.operation === 'restarting') {
+    const opLabels = { restarting: ['Restarting Server', 'Restarting'], starting: ['Starting Server', 'Starting'], stopping: ['Stopping Server', 'Stopping'] };
+    if (s.operation && opLabels[s.operation]) {
+      const [label, tagText] = opLabels[s.operation];
       dot.classList.add('amber');
-      text.textContent = 'Restarting Server';
+      text.textContent = label;
       tag.classList.remove('hidden');
-      tag.textContent = 'Restarting';
-      tag.classList.add('pending');
-    } else if (s.operation === 'starting') {
-      dot.classList.add('amber');
-      text.textContent = 'Starting Server';
-      tag.classList.remove('hidden');
-      tag.textContent = 'Starting';
-      tag.classList.add('pending');
-    } else if (s.operation === 'stopping') {
-      dot.classList.add('amber');
-      text.textContent = 'Stopping Server';
-      tag.classList.remove('hidden');
-      tag.textContent = 'Stopping';
+      tag.textContent = tagText;
       tag.classList.add('pending');
     } else if (s.error) {
       dot.classList.add('amber');
@@ -669,29 +518,31 @@ export function getAdbZenHtml(): string {
       text.textContent = 'Server Stopped';
     }
 
-    const connected = countBy(devices, (device) => device.state === 'device');
-    const usb = countBy(devices, (device) => device.connectionType === 'usb');
-    const wireless = countBy(devices, (device) => device.connectionType === 'wireless');
-    const unauthorized = countBy(devices, (device) => device.state === 'unauthorized');
+    const connected   = countBy(devices, (d) => d.state === 'device');
+    const usb         = countBy(devices, (d) => d.connectionType === 'usb');
+    const wireless    = countBy(devices, (d) => d.connectionType === 'wireless');
+    const unauthorized= countBy(devices, (d) => d.state === 'unauthorized');
 
     $('metaVersion').textContent = s.version ?? '—';
-    $('metaServer').textContent = s.serverRunning ? 'Online' : 'Offline';
-    $('metaServer').className = 'meta-value ' + (s.serverRunning ? 'ok' : 'error');
-    $('metaConnected').textContent = String(connected);
-    $('metaConnected').className = 'meta-value ' + (connected > 0 ? 'ok' : '');
-    $('metaUsb').textContent = String(usb);
-    $('metaUsb').className = 'meta-value ' + (usb > 0 ? 'ok' : '');
-    $('metaWireless').textContent = String(wireless);
-    $('metaWireless').className = 'meta-value ' + (wireless > 0 ? 'warn' : '');
+    $('metaServer').textContent  = s.serverRunning ? 'Online' : 'Offline';
+    $('metaServer').className    = 'meta-value ' + (s.serverRunning ? 'ok' : 'error');
+    $('metaConnected').textContent  = String(connected);
+    $('metaConnected').className    = 'meta-value ' + (connected > 0 ? 'ok' : '');
+    $('metaUsb').textContent        = String(usb);
+    $('metaUsb').className          = 'meta-value ' + (usb > 0 ? 'ok' : '');
+    $('metaWireless').textContent   = String(wireless);
+    $('metaWireless').className     = 'meta-value ' + (wireless > 0 ? 'warn' : '');
     $('metaUnauthorized').textContent = String(unauthorized);
-    $('metaUnauthorized').className = 'meta-value ' + (unauthorized > 0 ? 'warn' : '');
+    $('metaUnauthorized').className   = 'meta-value ' + (unauthorized > 0 ? 'warn' : '');
 
-    updateDeviceSummary(devices);
+    $('deviceCountText').textContent = devices.length
+      ? devices.length + ' device' + (devices.length === 1 ? '' : 's') + ' detected'
+      : 'No devices';
     renderDevices(devices);
 
-    $('btnStart').disabled = s.serverRunning || Boolean(s.operation);
-    $('btnKill').disabled = !s.serverRunning || Boolean(s.operation);
-    $('btnRestart').disabled = !s.serverRunning || Boolean(s.operation);
+    $('btnStart').disabled   = s.serverRunning   || Boolean(s.operation);
+    $('btnKill').disabled    = !s.serverRunning  || Boolean(s.operation);
+    $('btnRestart').disabled = !s.serverRunning  || Boolean(s.operation);
   });
 </script>
 </body>

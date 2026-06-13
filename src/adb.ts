@@ -33,21 +33,13 @@ export type AdbStatus = {
   operation: string | null;
 };
 
-type ExecResult = {
-  stdout: string;
-  stderr: string;
-  code: number | null;
-};
+type ExecResult = { stdout: string; stderr: string; code: number | null };
 
 export function run(cmd: string): Promise<ExecResult> {
   return new Promise((resolve) => {
     exec(
       cmd,
-      (
-        err: (Error & { code?: number | null }) | null,
-        stdout: string,
-        stderr: string,
-      ) => {
+      (err: (Error & { code?: number | null }) | null, stdout, stderr) => {
         resolve({
           stdout: stdout.trim(),
           stderr: stderr.trim(),
@@ -58,81 +50,73 @@ export function run(cmd: string): Promise<ExecResult> {
   });
 }
 
+const VALID_STATES = new Set<string>([
+  "device",
+  "unauthorized",
+  "offline",
+  "recovery",
+  "bootloader",
+  "sideload",
+]);
+
 function parseDeviceState(state: string): AdbDeviceState {
-  switch (state) {
-    case "device":
-    case "unauthorized":
-    case "offline":
-    case "recovery":
-    case "bootloader":
-    case "sideload":
-      return state;
-    default:
-      return "unknown";
-  }
+  return VALID_STATES.has(state) ? (state as AdbDeviceState) : "unknown";
 }
 
 function parseKeyValues(tokens: string[]): Record<string, string | null> {
-  const values: Record<string, string | null> = {};
-
+  const result: Record<string, string | null> = {};
   for (const token of tokens) {
-    const separatorIndex = token.indexOf(":");
-    if (separatorIndex <= 0) {
+    const sep = token.indexOf(":");
+    if (sep <= 0) {
       continue;
     }
-
-    const key = token.slice(0, separatorIndex).trim();
-    const value = token.slice(separatorIndex + 1).trim();
+    const key = token.slice(0, sep).trim();
     if (key) {
-      values[key] = value || null;
+      result[key] = token.slice(sep + 1).trim() || null;
     }
   }
-
-  return values;
+  return result;
 }
 
 export function parseAdbDevices(output: string): AdbDevice[] {
   return output
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("List of devices attached"))
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("List of devices attached"))
     .map((line) => {
       const [serial = "", state = "unknown", ...tokens] = line.split(/\s+/);
-      const values = parseKeyValues(tokens);
+      const v = parseKeyValues(tokens);
       const connectionType: AdbConnectionType = serial.includes(":")
         ? "wireless"
         : serial.startsWith("emulator-")
           ? "emulator"
           : "usb";
-
       return {
         serial,
         state: parseDeviceState(state),
         connectionType,
-        model: values.model ?? null,
-        product: values.product ?? null,
-        device: values.device ?? null,
-        usb: values.usb ?? null,
-        features: values.features ?? null,
+        model: v.model ?? null,
+        product: v.product ?? null,
+        device: v.device ?? null,
+        usb: v.usb ?? null,
+        features: v.features ?? null,
         raw: line,
       };
     });
 }
 
 export async function isAdbServerListening(): Promise<boolean> {
-  return await new Promise<boolean>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     const socket = new net.Socket();
-    let settled = false;
-
-    const finish = (value: boolean) => {
-      if (settled) {
+    let done = false;
+    const finish = (v: boolean) => {
+      if (done) {
         return;
       }
-      settled = true;
+      done = true;
       socket.destroy();
-      resolve(value);
+      resolve(v);
     };
-
     socket.setTimeout(500);
     socket.once("connect", () => finish(true));
     socket.once("timeout", () => finish(false));
@@ -142,9 +126,8 @@ export async function isAdbServerListening(): Promise<boolean> {
 }
 
 export async function getAdbStatus(): Promise<AdbStatus> {
-  const version = await run("adb version");
-
-  if (!version.stdout && !version.stderr) {
+  const { stdout, stderr } = await run("adb version");
+  if (!stdout && !stderr) {
     return {
       installed: false,
       version: null,
@@ -154,32 +137,25 @@ export async function getAdbStatus(): Promise<AdbStatus> {
       operation: null,
     };
   }
-
-  const versionLine = version.stdout.split("\n")[0] || "";
-  const versionMatch = versionLine.match(/Version\s+([\d.]+)/i);
-  const versionStr = versionMatch ? versionMatch[1] : versionLine;
-
+  const match = (stdout.split("\n")[0] ?? "").match(/Version\s+([\d.]+)/i);
+  const version = match ? match[1] : (stdout.split("\n")[0] ?? "");
   const serverRunning = await isAdbServerListening();
   let devices: AdbDevice[] = [];
   let deviceErrors = "";
-
   if (serverRunning) {
-    const deviceList = await run("adb devices -l");
-    devices = parseAdbDevices(deviceList.stdout);
-    deviceErrors = deviceList.stderr;
+    const list = await run("adb devices -l");
+    devices = parseAdbDevices(list.stdout);
+    deviceErrors = list.stderr;
   }
-
   const mismatch =
     deviceErrors.includes("out of date") ||
     deviceErrors.includes("doesn't match");
-  const errorMsg = mismatch ? "ADB server version mismatch detected" : null;
-
   return {
     installed: true,
-    version: versionStr,
+    version,
     serverRunning,
     devices,
-    error: errorMsg,
+    error: mismatch ? "ADB server version mismatch detected" : null,
     operation: null,
   };
 }

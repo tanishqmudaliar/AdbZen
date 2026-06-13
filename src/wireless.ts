@@ -1,22 +1,3 @@
-/**
- * wireless.ts — Wireless pairing tab for ADB Zen
- *
- * New dependencies (add to package.json before building):
- *   "bonjour-service": "^1.2.1",
- *   "qrcode": "^1.5.4"
- * Dev dependencies:
- *   "@types/qrcode": "^1.5.5"
- *
- * New view to register in package.json > contributes.views > adbzen-sidebar:
- *   { "id": "adbzen.wirelessView", "name": "Wireless Pairing" }
- *
- * In extension.ts add:
- *   import { WirelessViewProvider } from "./wireless.js";
- *   context.subscriptions.push(
- *     vscode.window.registerWebviewViewProvider("adbzen.wirelessView", new WirelessViewProvider())
- *   );
- */
-
 import * as net from "net";
 import * as vscode from "vscode";
 import { run } from "./adb.js";
@@ -50,7 +31,6 @@ class MdnsScanner {
         onDevice(ip, service.port);
       }
     });
-
     this.timer = setTimeout(() => {
       this.stop();
       onTimeout?.();
@@ -113,7 +93,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     webviewView.onDidDispose(() => this._stopMdns());
   }
 
-  // ── private helpers ──
+  // ── private helpers ──────────────────────────────────────────────────────
 
   private _stopMdns() {
     this._mdns?.stop();
@@ -121,12 +101,11 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _log(kind: string, text: string) {
-    const entry = { kind, text };
-    this._logLines.push(entry);
+    this._logLines.push({ kind, text });
     if (this._logLines.length > 200) {
       this._logLines.shift();
     }
-    this._view?.webview.postMessage({ command: "log", data: entry });
+    this._view?.webview.postMessage({ command: "log", data: { kind, text } });
   }
 
   private _sendLogHistory() {
@@ -140,7 +119,20 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage({ command, data });
   }
 
-  // ── QR flow ──
+  /** Run a command, log it, return result. */
+  private async _exec(cmd: string) {
+    this._log("command", `> ${cmd}`);
+    const r = await run(cmd);
+    if (r.stdout) {
+      this._log("output", r.stdout);
+    }
+    if (r.stderr) {
+      this._log("error", r.stderr);
+    }
+    return r;
+  }
+
+  // ── QR flow ──────────────────────────────────────────────────────────────
 
   private async _startQrFlow() {
     this._stopMdns();
@@ -173,16 +165,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       MDNS_PAIRING_TYPE,
       async (ip, port) => {
         this._post("status", { mode: "pairing" });
-        this._log("command", `> adb pair ${ip}:${port} ${password}`);
-
-        const r = await run(`adb pair ${ip}:${port} ${password}`);
-        if (r.stdout) {
-          this._log("output", r.stdout);
-        }
-        if (r.stderr) {
-          this._log("error", r.stderr);
-        }
-
+        const r = await this._exec(`adb pair ${ip}:${port} ${password}`);
         const ok = (r.stdout + r.stderr)
           .toLowerCase()
           .includes("successfully paired");
@@ -193,7 +176,6 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
           });
           return;
         }
-
         this._post("status", { mode: "connecting" });
         this._log("output", "Paired! Scanning for debug port advertisement…");
         this._autoConnect(ip);
@@ -210,20 +192,12 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _autoConnect(pairedIp: string) {
-    const connectScan = new MdnsScanner();
-    connectScan.scan(
+    const scan = new MdnsScanner();
+    scan.scan(
       MDNS_CONNECT_TYPE,
       async (ip, port) => {
         const target = ip || pairedIp;
-        this._log("command", `> adb connect ${target}:${port}`);
-        const r = await run(`adb connect ${target}:${port}`);
-        if (r.stdout) {
-          this._log("output", r.stdout);
-        }
-        if (r.stderr) {
-          this._log("error", r.stderr);
-        }
-
+        const r = await this._exec(`adb connect ${target}:${port}`);
         const ok = r.stdout.toLowerCase().includes("connected");
         this._post(
           "status",
@@ -246,7 +220,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     );
   }
 
-  // ── Code pair flow ──
+  // ── Code pair flow ────────────────────────────────────────────────────────
 
   private async _pairWithCode(ip: string, port: string, code: string) {
     if (!ip || !port || !code) {
@@ -257,16 +231,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     this._post("status", { mode: "pairing" });
-    this._log("command", `> adb pair ${ip}:${port} ${code}`);
-
-    const r = await run(`adb pair ${ip}:${port} ${code}`);
-    if (r.stdout) {
-      this._log("output", r.stdout);
-    }
-    if (r.stderr) {
-      this._log("error", r.stderr);
-    }
-
+    const r = await this._exec(`adb pair ${ip}:${port} ${code}`);
     const ok = (r.stdout + r.stderr)
       .toLowerCase()
       .includes("successfully paired");
@@ -284,7 +249,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     );
   }
 
-  // ── Connect / disconnect ──
+  // ── Connect / disconnect ──────────────────────────────────────────────────
 
   private async _adbConnect(ip: string, port: string) {
     if (!ip || !port) {
@@ -294,15 +259,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       });
       return;
     }
-    this._log("command", `> adb connect ${ip}:${port}`);
-    const r = await run(`adb connect ${ip}:${port}`);
-    if (r.stdout) {
-      this._log("output", r.stdout);
-    }
-    if (r.stderr) {
-      this._log("error", r.stderr);
-    }
-
+    const r = await this._exec(`adb connect ${ip}:${port}`);
     const ok = r.stdout.toLowerCase().includes("connected");
     this._post(
       "status",
@@ -315,14 +272,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
   private async _adbDisconnect(ip: string, port: string) {
     const target = ip && port ? `${ip}:${port}` : "";
     const cmd = target ? `adb disconnect ${target}` : "adb disconnect";
-    this._log("command", `> ${cmd}`);
-    const r = await run(cmd);
-    if (r.stdout) {
-      this._log("output", r.stdout);
-    }
-    if (r.stderr) {
-      this._log("error", r.stderr);
-    }
+    await this._exec(cmd);
     this._post("status", { mode: "idle" });
   }
 }
@@ -347,7 +297,7 @@ export function getWirelessHtml(): string {
 
   .hidden { display: none !important; }
 
-  /* ── tabs ── */
+  /* ── Tabs ── */
   .tabs {
     display: flex;
     gap: 4px;
@@ -377,7 +327,7 @@ export function getWirelessHtml(): string {
     border-color: var(--vscode-widget-border, rgba(255,255,255,0.12));
   }
 
-  /* ── cards ── */
+  /* ── Cards ── */
   .card {
     background: var(--vscode-sideBar-background);
     border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
@@ -394,52 +344,68 @@ export function getWirelessHtml(): string {
     margin-bottom: 6px;
   }
 
-  .hint {
-    font-size: 11px;
-    line-height: 1.5;
-    opacity: 0.65;
+  /* ── Steps card ── */
+  .steps-card {
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+    border-radius: 8px;
+    padding: 11px 13px;
+    margin-bottom: 10px;
+    background: rgba(255,255,255,0.02);
   }
-
-  .port-explainer {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  .steps {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
     gap: 6px;
     margin-top: 8px;
   }
-  .port-box {
-    border-radius: 6px;
-    padding: 7px 9px;
-    font-size: 10px;
-    line-height: 1.5;
+  .steps li {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    line-height: 1.55;
+    align-items: flex-start;
   }
-  .port-box.debug {
-    background: rgba(78, 201, 78, 0.08);
-    border: 1px solid rgba(78, 201, 78, 0.2);
-  }
-  .port-box.pair {
-    background: rgba(229, 162, 32, 0.08);
-    border: 1px solid rgba(229, 162, 32, 0.2);
-  }
-  .port-box-label {
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+  .step-num {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
     font-size: 9px;
-    margin-bottom: 2px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+    opacity: 0.7;
   }
-  .port-box.debug .port-box-label { color: #4ec94e; }
-  .port-box.pair  .port-box-label { color: #e5a220; }
+  .steps li strong { font-weight: 600; }
 
-  /* ── fields ── */
+  .port-note {
+    margin-top: 10px;
+    font-size: 10px;
+    padding: 7px 9px;
+    border-radius: 5px;
+    background: rgba(229, 162, 32, 0.07);
+    border: 1px solid rgba(229, 162, 32, 0.2);
+    color: #e5a220;
+    line-height: 1.55;
+  }
+  .port-note strong { font-weight: 600; }
+
+  /* ── Fields ── */
   .field-group { margin-bottom: 9px; }
+  .field-group:last-of-type { margin-bottom: 0; }
   .field-label {
     display: block;
-    font-size: 11px;
-    opacity: 0.55;
+    font-size: 10px;
+    opacity: 0.5;
     margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
-  .field-row { display: flex; gap: 6px; }
-  .field-row .input { flex: 1; min-width: 0; }
   .input {
     width: 100%;
     padding: 6px 9px;
@@ -453,16 +419,17 @@ export function getWirelessHtml(): string {
     transition: border-color 0.15s;
   }
   .input:focus { border-color: var(--vscode-focusBorder, #007fd4); }
-  .input::placeholder { opacity: 0.4; }
-  .input.code-input {
+  .input::placeholder { opacity: 0.35; }
+  .code-input {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.25em;
     text-align: center;
+    font-family: var(--vscode-editor-font-family, monospace);
   }
 
-  /* ── buttons ── */
-  .actions { display: flex; flex-direction: column; gap: 6px; }
+  /* ── Buttons ── */
+  .actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
   .btn {
     width: 100%;
     padding: 7px 12px;
@@ -479,49 +446,19 @@ export function getWirelessHtml(): string {
     gap: 7px;
   }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .btn-primary {
-    background: #4ec94e22;
-    border-color: #4ec94e55;
-    color: #4ec94e;
-  }
-  .btn-primary:hover:not(:disabled) { background: #4ec94e33; }
-  .btn-danger {
-    background: rgba(244,71,71,0.08);
-    border-color: rgba(244,71,71,0.3);
-    color: #f47878;
-  }
-  .btn-danger:hover:not(:disabled) { background: rgba(244,71,71,0.15); }
-  .btn-neutral {
-    background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.05));
-    border-color: var(--vscode-widget-border, rgba(255,255,255,0.1));
-    color: var(--vscode-foreground);
-  }
-  .btn-neutral:hover:not(:disabled) {
-    background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.1));
-  }
+  .btn-primary  { background: #4ec94e22; border-color: #4ec94e55; color: #4ec94e; }
+  .btn-primary:hover:not(:disabled)  { background: #4ec94e33; }
+  .btn-danger   { background: rgba(244,71,71,0.08); border-color: rgba(244,71,71,0.3); color: #f47878; }
+  .btn-danger:hover:not(:disabled)   { background: rgba(244,71,71,0.15); }
+  .btn-neutral  { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--vscode-foreground); }
+  .btn-neutral:hover:not(:disabled)  { background: rgba(255,255,255,0.1); }
 
-  /* ── QR area ── */
-  .qr-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0 4px;
-  }
-  .qr-wrap img {
-    border-radius: 8px;
-    border: 2px solid rgba(255,255,255,0.1);
-    display: block;
-    max-width: 180px;
-  }
-  .qr-hint {
-    font-size: 11px;
-    text-align: center;
-    opacity: 0.6;
-    line-height: 1.5;
-  }
+  /* ── QR ── */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0; }
+  .qr-wrap img { border-radius: 8px; border: 2px solid rgba(255,255,255,0.1); max-width: 180px; display: block; }
+  .qr-hint { font-size: 11px; text-align: center; opacity: 0.6; line-height: 1.5; }
 
-  /* ── status banners ── */
+  /* ── Status banners ── */
   .status-banner {
     border-radius: 7px;
     padding: 9px 11px;
@@ -532,21 +469,9 @@ export function getWirelessHtml(): string {
     align-items: flex-start;
     gap: 8px;
   }
-  .status-banner.ok {
-    background: rgba(78, 201, 78, 0.08);
-    border: 1px solid rgba(78, 201, 78, 0.25);
-    color: #4ec94e;
-  }
-  .status-banner.warn {
-    background: rgba(229, 162, 32, 0.08);
-    border: 1px solid rgba(229, 162, 32, 0.25);
-    color: #e5a220;
-  }
-  .status-banner.error {
-    background: rgba(244, 71, 71, 0.08);
-    border: 1px solid rgba(244, 71, 71, 0.25);
-    color: #f47878;
-  }
+  .status-banner.ok    { background: rgba(78,201,78,0.08);   border: 1px solid rgba(78,201,78,0.25);   color: #4ec94e; }
+  .status-banner.warn  { background: rgba(229,162,32,0.08);  border: 1px solid rgba(229,162,32,0.25);  color: #e5a220; }
+  .status-banner.error { background: rgba(244,71,71,0.08);   border: 1px solid rgba(244,71,71,0.25);   color: #f47878; }
 
   .spinner {
     display: inline-block;
@@ -560,7 +485,63 @@ export function getWirelessHtml(): string {
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── terminal ── */
+  /* ── Recent connections ── */
+  .history-section { margin-bottom: 10px; }
+  .history-label {
+    font-size: 10px;
+    opacity: 0.38;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .history-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .history-chip {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .history-chip:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+
+  /* ── Disconnect confirmation modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 16px;
+  }
+  .modal {
+    background: var(--vscode-editorWidget-background, #252526);
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.18));
+    border-radius: 10px;
+    padding: 16px;
+    width: 100%;
+    max-width: 260px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .modal-icon { font-size: 20px; text-align: center; margin-bottom: 8px; }
+  .modal-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; text-align: center; }
+  .modal-body  { font-size: 11px; line-height: 1.55; opacity: 0.75; margin-bottom: 14px; text-align: center; }
+  .modal-body code {
+    font-family: var(--vscode-editor-font-family, monospace);
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions .btn { flex: 1; padding: 6px 10px; font-size: 11px; }
+
+  /* ── Terminal ── */
   .terminal-panel {
     margin-top: 10px;
     border-radius: 8px;
@@ -581,8 +562,8 @@ export function getWirelessHtml(): string {
   }
   .terminal-actions { display: flex; align-items: center; gap: 8px; }
   .clear-log-btn {
-    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
-    background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.05));
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
     color: var(--vscode-foreground);
     border-radius: 999px;
     padding: 3px 8px;
@@ -602,13 +583,26 @@ export function getWirelessHtml(): string {
     white-space: pre-wrap;
     word-break: break-word;
   }
+  .terminal-line { margin-bottom: 3px; }
   .terminal-line.command { color: var(--vscode-foreground); }
   .terminal-line.output  { color: rgba(255,255,255,0.8); }
   .terminal-line.error   { color: #f47878; }
-  .terminal-line { margin-bottom: 3px; }
 </style>
 </head>
 <body>
+
+<!-- ══════════ Disconnect Confirmation Modal ══════════ -->
+<div id="disconnect-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-icon">⚡</div>
+    <div class="modal-title">Disconnect device?</div>
+    <div class="modal-body" id="modal-body-text">This will end the ADB session.</div>
+    <div class="modal-actions">
+      <button class="btn btn-neutral" id="cancelDisconnect">Cancel</button>
+      <button class="btn btn-danger"  id="confirmDisconnect">Disconnect</button>
+    </div>
+  </div>
+</div>
 
 <!-- Tab bar -->
 <div class="tabs">
@@ -617,112 +611,113 @@ export function getWirelessHtml(): string {
   <button class="tab-btn"        data-tab="connect">⚡ Connect</button>
 </div>
 
-<!-- ══════════ QR PAIR tab ══════════ -->
+<!-- ══════════ QR PAIR TAB ══════════ -->
 <div id="tab-qr" class="tab-panel">
 
-  <div class="card">
-    <div class="section-label">On your phone</div>
-    <div class="hint">Settings → Developer Options → Wireless Debugging →<br><strong>Pair device with QR code</strong></div>
+  <div class="steps-card">
+    <div class="section-label">How to pair with QR</div>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Enable <strong>Developer Options</strong> on your phone if you haven't already</span></li>
+      <li><span class="step-num">2</span><span>Open <strong>Settings → Developer Options → Wireless Debugging</strong></span></li>
+      <li><span class="step-num">3</span><span>Tap <strong>"Pair device with QR code"</strong></span></li>
+      <li><span class="step-num">4</span><span>Click <strong>Generate QR Code</strong> below and point your phone camera at it</span></li>
+      <li><span class="step-num">5</span><span>AdbZen will automatically pair and connect — no extra steps needed</span></li>
+    </ol>
   </div>
 
   <div class="card">
-    <!-- idle state -->
     <div id="qr-idle">
       <button class="btn btn-primary" id="btnGenerateQr">Generate QR Code</button>
     </div>
-
-    <!-- QR displayed, waiting for phone to scan -->
     <div id="qr-active" class="hidden">
       <div class="qr-wrap">
         <img id="qrImage" src="" alt="QR Code" />
-        <div class="qr-hint">Point your phone camera at this code</div>
+        <div class="qr-hint">Point your phone camera at this code.<br>Keep this window open until pairing completes.</div>
       </div>
       <button class="btn btn-neutral" id="btnCancelQr" style="margin-top:8px">Cancel</button>
     </div>
   </div>
 
-  <!-- status for QR tab -->
   <div id="qr-status-area"></div>
 
 </div>
 
-<!-- ══════════ CODE PAIR tab ══════════ -->
+<!-- ══════════ CODE PAIR TAB ══════════ -->
 <div id="tab-code" class="tab-panel hidden">
 
-  <div class="card">
-    <div class="section-label">Two-port explainer</div>
-    <div class="hint">Wireless Debugging shows two different ports for two different jobs:</div>
-    <div class="port-explainer">
-      <div class="port-box debug">
-        <div class="port-box-label">Debug port</div>
-        Main screen "IP address and port"<br>e.g. <code>:46019</code><br>Use with <strong>Connect</strong> tab every session.
-      </div>
-      <div class="port-box pair">
-        <div class="port-box-label">Pairing port</div>
-        "Pair with pairing code" screen<br>e.g. <code>:37291</code><br>Temporary. Use <strong>once</strong> with the 6-digit code.
-      </div>
+  <div class="steps-card">
+    <div class="section-label">How to pair with a code</div>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Open <strong>Settings → Developer Options → Wireless Debugging</strong></span></li>
+      <li><span class="step-num">2</span><span>Tap <strong>"Pair device with pairing code"</strong></span></li>
+      <li><span class="step-num">3</span><span>Note the <strong>pairing port</strong> (e.g. <code style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px">:37291</code>) and <strong>6-digit code</strong> shown on this sub-screen</span></li>
+      <li><span class="step-num">4</span><span>Enter them below and tap <strong>Pair Device</strong></span></li>
+      <li><span class="step-num">5</span><span>After success, go to the <strong>Connect tab</strong> to complete the connection</span></li>
+    </ol>
+    <div class="port-note">
+      ⚠ The <strong>pairing port</strong> is a <em>one-time temporary port</em> from the "Pair device" sub-screen — it's different from the debug port on the main Wireless Debugging screen.
     </div>
   </div>
 
   <div class="card">
-    <div class="section-label">On your phone: Wireless Debugging → Pair device with pairing code</div>
-
-    <div class="field-group" style="margin-top:8px">
-      <label class="field-label">IP Address</label>
-      <input class="input" id="pairIp" type="text" placeholder="192.168.x.x" />
-    </div>
-
     <div class="field-group">
-      <label class="field-label">Pairing Port <span style="opacity:0.4">(the temporary port from the pairing screen)</span></label>
+      <label class="field-label">IP Address</label>
+      <input class="input" id="pairIp" type="text" placeholder="192.168.x.x" autocomplete="off" />
+    </div>
+    <div class="field-group">
+      <label class="field-label">Pairing Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from the "Pair device" sub-screen)</span></label>
       <input class="input" id="pairPort" type="number" placeholder="e.g. 37291" />
     </div>
-
     <div class="field-group">
       <label class="field-label">6-digit Pairing Code</label>
-      <input class="input code-input" id="pairCode" type="text" placeholder="000000" maxlength="6" inputmode="numeric" />
+      <input class="input code-input" id="pairCode" type="text" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
     </div>
-
-    <button class="btn btn-primary" id="btnPair">Pair Device</button>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnPair">Pair Device</button>
+    </div>
   </div>
 
-  <!-- status for Code tab -->
   <div id="code-status-area"></div>
 
 </div>
 
-<!-- ══════════ CONNECT tab ══════════ -->
+<!-- ══════════ CONNECT TAB ══════════ -->
 <div id="tab-connect" class="tab-panel hidden">
 
-  <div class="card">
-    <div class="section-label">Connect (after pairing)</div>
-    <div class="hint">Enter the IP and <strong>debug port</strong> shown on the main Wireless Debugging screen — not the pairing port.</div>
+  <div class="steps-card">
+    <div class="section-label">How to connect</div>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Pair your device first using the <strong>QR</strong> or <strong>Code Pair</strong> tab (once per device, survives reboots)</span></li>
+      <li><span class="step-num">2</span><span>Open <strong>Wireless Debugging</strong> on your phone</span></li>
+      <li><span class="step-num">3</span><span>Use the <strong>IP address and port</strong> shown on the <em>main</em> Wireless Debugging screen</span></li>
+      <li><span class="step-num">4</span><span>Tap <strong>Connect</strong> — the debug port changes every session</span></li>
+    </ol>
+    <div class="port-note">
+      The <strong>debug port</strong> (e.g. <code style="font-family:monospace;font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px">:46019</code>) is on the <strong>main Wireless Debugging screen</strong>, not the "Pair device" sub-screen.
+    </div>
   </div>
 
   <div class="card">
     <div class="field-group">
       <label class="field-label">IP Address</label>
-      <input class="input" id="connectIp" type="text" placeholder="192.168.x.x" />
+      <input class="input" id="connectIp" type="text" placeholder="192.168.x.x" autocomplete="off" />
     </div>
-
     <div class="field-group">
-      <label class="field-label">Debug Port <span style="opacity:0.4">(from "IP address and port" on phone)</span></label>
+      <label class="field-label">Debug Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from "IP address and port" on main screen)</span></label>
       <input class="input" id="connectPort" type="number" placeholder="e.g. 46019" />
     </div>
-
     <div class="actions">
-      <button class="btn btn-primary"  id="btnConnect">Connect</button>
-      <button class="btn btn-danger"   id="btnDisconnect">Disconnect</button>
-    </div>
-
-    <div style="margin-top:8px">
-      <label class="field-label">Or disconnect a specific device</label>
-      <div class="field-row">
-        <input class="input" id="disconnectTarget" type="text" placeholder="192.168.x.x:port (blank = all)" />
-      </div>
+      <button class="btn btn-primary" id="btnConnect">Connect</button>
+      <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
+      <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
     </div>
   </div>
 
-  <!-- status for Connect tab -->
+  <div id="historySection" class="history-section hidden">
+    <div class="history-label">Recent connections — click to fill</div>
+    <div class="history-chips" id="historyList"></div>
+  </div>
+
   <div id="connect-status-area"></div>
 
 </div>
@@ -743,7 +738,7 @@ export function getWirelessHtml(): string {
   const vscode = acquireVsCodeApi();
   const $ = id => document.getElementById(id);
 
-  // ── tab switching ──────────────────────────────────────────────────────────
+  // ── Tab switching ────────────────────────────────────────────────────────
   let activeTab = 'qr';
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -754,34 +749,101 @@ export function getWirelessHtml(): string {
       btn.classList.add('active');
       $('tab-' + tab).classList.remove('hidden');
       activeTab = tab;
-      // clear the status area of the newly shown tab so stale banners don't linger
-      setStatus(tab, null);
+      clearStatus(tab);
     });
   });
 
-  // ── status helpers ─────────────────────────────────────────────────────────
+  // ── Status banner helpers ────────────────────────────────────────────────
+  function escapeHtml(t) {
+    return String(t).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+  }
+
   function makeBanner(tone, icon, text) {
     const d = document.createElement('div');
     d.className = 'status-banner ' + tone;
-    d.innerHTML = icon + ' <span>' + escapeHtml(text) + '</span>';
+    d.innerHTML = '<span>' + icon + '</span><span>' + escapeHtml(text) + '</span>';
     return d;
   }
 
   function makeSpinnerBanner(text) {
     const d = document.createElement('div');
     d.className = 'status-banner warn';
-    d.innerHTML = '<span class="spinner"></span> <span>' + escapeHtml(text) + '</span>';
+    d.innerHTML = '<span class="spinner"></span><span>' + escapeHtml(text) + '</span>';
     return d;
   }
 
   function setStatus(tab, node) {
     const area = $(tab + '-status-area');
-    if (!area) return;
+    if (!area) { return; }
     area.innerHTML = '';
-    if (node) area.appendChild(node);
+    if (node) { area.appendChild(node); }
   }
 
-  // ── incoming messages ──────────────────────────────────────────────────────
+  function clearStatus(tab) { setStatus(tab, null); }
+
+  // ── Recent connections history ───────────────────────────────────────────
+  const recentConns = [];
+  const MAX_HISTORY = 5;
+
+  function addToHistory(ip, port) {
+    if (!ip || !port) { return; }
+    const idx = recentConns.findIndex(r => r.ip === ip && r.port === port);
+    if (idx !== -1) { recentConns.splice(idx, 1); }
+    recentConns.unshift({ ip, port });
+    if (recentConns.length > MAX_HISTORY) { recentConns.pop(); }
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const section = $('historySection');
+    const list    = $('historyList');
+    if (!recentConns.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    list.innerHTML = recentConns
+      .map(r => '<button class="history-chip" data-ip="' + escapeHtml(r.ip) + '" data-port="' + escapeHtml(r.port) + '">' + escapeHtml(r.ip) + ':' + escapeHtml(r.port) + '</button>')
+      .join('');
+    list.querySelectorAll('.history-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        $('connectIp').value   = chip.dataset.ip;
+        $('connectPort').value = chip.dataset.port;
+        clearStatus('connect');
+      });
+    });
+  }
+
+  // ── Disconnect confirmation modal ────────────────────────────────────────
+  let pendingDisconnect = null;
+
+  function showDisconnectModal(ip, port, labelText) {
+    pendingDisconnect = { ip, port };
+    const body = ip && port
+      ? 'Disconnect <code>' + escapeHtml(ip + ':' + port) + '</code> from ADB?'
+      : 'Disconnect <strong>all</strong> wireless ADB devices?';
+    $('modal-body-text').innerHTML = body;
+    $('disconnect-modal').classList.remove('hidden');
+  }
+
+  $('cancelDisconnect').addEventListener('click', () => {
+    $('disconnect-modal').classList.add('hidden');
+    pendingDisconnect = null;
+  });
+
+  $('confirmDisconnect').addEventListener('click', () => {
+    if (!pendingDisconnect) { return; }
+    $('disconnect-modal').classList.add('hidden');
+    vscode.postMessage({ command: 'disconnect', ip: pendingDisconnect.ip, port: pendingDisconnect.port });
+    pendingDisconnect = null;
+  });
+
+  // Close modal on backdrop click
+  $('disconnect-modal').addEventListener('click', (e) => {
+    if (e.target === $('disconnect-modal')) {
+      $('disconnect-modal').classList.add('hidden');
+      pendingDisconnect = null;
+    }
+  });
+
+  // ── Incoming messages ────────────────────────────────────────────────────
   window.addEventListener('message', ({ data }) => {
     if (data.command === 'logHistory') {
       terminalEntries.splice(0, terminalEntries.length, ...data.data);
@@ -790,11 +852,11 @@ export function getWirelessHtml(): string {
     }
     if (data.command === 'log') {
       terminalEntries.push(data.data);
-      if (terminalEntries.length > 200) terminalEntries.shift();
+      if (terminalEntries.length > 200) { terminalEntries.shift(); }
       renderTerminal();
       return;
     }
-    if (data.command !== 'status') return;
+    if (data.command !== 'status') { return; }
 
     const s = data.data;
 
@@ -805,7 +867,7 @@ export function getWirelessHtml(): string {
         setStatus('connect', null);
         $('qr-idle').classList.remove('hidden');
         $('qr-active').classList.add('hidden');
-        $('btnPair').disabled = false;
+        $('btnPair').disabled    = false;
         $('btnConnect').disabled = false;
         break;
 
@@ -813,51 +875,51 @@ export function getWirelessHtml(): string {
         $('qr-idle').classList.add('hidden');
         $('qr-active').classList.remove('hidden');
         $('qrImage').src = s.qrDataUrl;
-        setStatus('qr', makeSpinnerBanner('Waiting for phone to scan…'));
+        setStatus('qr', makeSpinnerBanner('Waiting for phone to scan the QR code…'));
         break;
 
       case 'pairing':
-        setStatus(activeTab, makeSpinnerBanner('Pairing…'));
+        setStatus(activeTab, makeSpinnerBanner('Pairing with device…'));
         $('btnPair').disabled = true;
         break;
 
       case 'connecting':
-        setStatus('qr', makeSpinnerBanner('Paired! Connecting…'));
+        setStatus('qr', makeSpinnerBanner('Paired! Looking for debug port advertisement…'));
         break;
 
       case 'connected':
         $('qr-idle').classList.remove('hidden');
         $('qr-active').classList.add('hidden');
         setStatus(activeTab, makeBanner('ok', '✓', 'Connected to ' + s.ip + ':' + s.port));
-        $('btnPair').disabled = false;
+        $('btnPair').disabled    = false;
         $('btnConnect').disabled = false;
-        // Pre-fill Connect tab fields
-        if (s.ip) { $('connectIp').value = s.ip; }
-        if (s.port) { $('connectPort').value = s.port; }
+        if (s.ip)   { $('connectIp').value   = s.ip; }
+        if (s.port) { $('connectPort').value  = s.port; }
+        addToHistory(s.ip, s.port);
         break;
 
       case 'pair-success':
-        setStatus('code', makeBanner('ok', '✓', 'Paired! Switch to the Connect tab and enter the debug port to connect.'));
+        setStatus('code', makeBanner('ok', '✓', 'Paired! Switch to the Connect tab, enter the debug port from the main Wireless Debugging screen, and tap Connect.'));
         $('btnPair').disabled = false;
         break;
 
       case 'paired-no-connect':
-        setStatus('qr', makeBanner('warn', '!', s.message));
         $('qr-idle').classList.remove('hidden');
         $('qr-active').classList.add('hidden');
+        setStatus('qr', makeBanner('warn', '!', s.message));
         break;
 
       case 'error':
-        setStatus(activeTab, makeBanner('error', '✕', s.message || 'An error occurred'));
         $('qr-idle').classList.remove('hidden');
         $('qr-active').classList.add('hidden');
-        $('btnPair').disabled = false;
+        setStatus(activeTab, makeBanner('error', '✕', s.message || 'An error occurred'));
+        $('btnPair').disabled    = false;
         $('btnConnect').disabled = false;
         break;
     }
   });
 
-  // ── button handlers ────────────────────────────────────────────────────────
+  // ── Button handlers ──────────────────────────────────────────────────────
   $('btnGenerateQr').addEventListener('click', () => {
     vscode.postMessage({ command: 'generateQr' });
   });
@@ -887,30 +949,33 @@ export function getWirelessHtml(): string {
   });
 
   $('btnDisconnect').addEventListener('click', () => {
-    const raw = $('disconnectTarget').value.trim();
-    const ip   = raw.includes(':') ? raw.split(':')[0] : ($('connectIp').value.trim() || raw);
-    const port = raw.includes(':') ? raw.split(':')[1] : $('connectPort').value.trim();
-    vscode.postMessage({ command: 'disconnect', ip, port });
+    const ip   = $('connectIp').value.trim();
+    const port = $('connectPort').value.trim();
+    if (!ip || !port) {
+      setStatus('connect', makeBanner('error', '✕', 'Enter an IP and port to disconnect a specific device, or use "Disconnect All Wireless"'));
+      return;
+    }
+    showDisconnectModal(ip, port);
+  });
+
+  $('btnDisconnectAll').addEventListener('click', () => {
+    showDisconnectModal('', '');
   });
 
   $('clearLogBtn').addEventListener('click', () => {
     vscode.postMessage({ command: 'clearLog' });
   });
 
-  // Allow Enter key to trigger pair/connect
+  // Enter key shortcuts
   ['pairIp', 'pairPort', 'pairCode'].forEach(id =>
-    $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') $('btnPair').click(); })
+    $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') { $('btnPair').click(); } })
   );
   ['connectIp', 'connectPort'].forEach(id =>
-    $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') $('btnConnect').click(); })
+    $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') { $('btnConnect').click(); } })
   );
 
-  // ── terminal ───────────────────────────────────────────────────────────────
+  // ── Terminal ─────────────────────────────────────────────────────────────
   const terminalEntries = [];
-
-  function escapeHtml(t) {
-    return String(t).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-  }
 
   function renderTerminal() {
     const body = $('terminalBody');
