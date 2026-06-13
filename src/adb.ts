@@ -78,6 +78,26 @@ function parseKeyValues(tokens: string[]): Record<string, string | null> {
   return result;
 }
 
+function detectConnectionType(serial: string): AdbConnectionType {
+  const normalized = serial.toLowerCase();
+
+  if (serial.startsWith("emulator-")) {
+    return "emulator";
+  }
+
+  const looksLikeWireless =
+    /^(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(serial) ||
+    /^.+:\d+$/.test(serial) ||
+    normalized.includes("adb-tls") ||
+    normalized.endsWith(".local");
+
+  if (looksLikeWireless) {
+    return "wireless";
+  }
+
+  return "usb";
+}
+
 export function parseAdbDevices(output: string): AdbDevice[] {
   return output
     .split("\n")
@@ -86,11 +106,7 @@ export function parseAdbDevices(output: string): AdbDevice[] {
     .map((line) => {
       const [serial = "", state = "unknown", ...tokens] = line.split(/\s+/);
       const v = parseKeyValues(tokens);
-      const connectionType: AdbConnectionType = serial.includes(":")
-        ? "wireless"
-        : serial.startsWith("emulator-")
-          ? "emulator"
-          : "usb";
+      const connectionType = detectConnectionType(serial);
       return {
         serial,
         state: parseDeviceState(state),

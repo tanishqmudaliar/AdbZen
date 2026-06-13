@@ -483,12 +483,22 @@ export function getWirelessHtml(): string {
   .field-group { margin-bottom: 9px; }
   .field-group:last-of-type { margin-bottom: 0; }
   .field-label {
-    display: block;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px;
     font-size: 10px;
     opacity: 0.5;
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+  .field-label .sub-note {
+    opacity: 0.75; /* relative to parent's 0.5 → visually ~0.37 */
+    font-size: 9px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
   }
   .input {
     width: 100%;
@@ -504,6 +514,10 @@ export function getWirelessHtml(): string {
   }
   .input:focus { border-color: var(--vscode-focusBorder, #007fd4); }
   .input::placeholder { opacity: 0.35; }
+  /* Hide number spinner arrows — they break the layout */
+  .input[type="number"]::-webkit-inner-spin-button,
+  .input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   .code-input {
     font-size: 18px;
     font-weight: 700;
@@ -512,8 +526,145 @@ export function getWirelessHtml(): string {
     font-family: var(--vscode-editor-font-family, monospace);
   }
 
+  /* ══ Connect card — complete redesign ══ */
+
+  /* Outer shell: tight column, uniform gap everywhere */
+  .cf {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* ── Target row: IP + colon + Port inline ── */
+  .cf-target {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.14));
+    border-radius: 7px;
+    overflow: hidden;
+    background: var(--vscode-input-background, rgba(255,255,255,0.05));
+    transition: border-color 0.15s;
+  }
+  .cf-target:focus-within {
+    border-color: var(--vscode-focusBorder, #007fd4);
+  }
+  .cf-target-input {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-family: var(--vscode-font-family);
+    background: transparent;
+    border: none;
+    color: var(--vscode-foreground);
+    outline: none;
+  }
+  .cf-target-input::placeholder { opacity: 0.3; }
+  .cf-sep {
+    display: flex;
+    align-items: center;
+    padding: 0 2px;
+    font-size: 14px;
+    font-weight: 300;
+    opacity: 0.25;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .cf-port-input {
+    flex: 0 0 90px;
+    width: 90px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-family: var(--vscode-font-family);
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+    color: var(--vscode-foreground);
+    outline: none;
+    text-align: left;
+  }
+  .cf-port-input::placeholder { opacity: 0.3; }
+  /* kill spinners on the port number input */
+  .cf-port-input::-webkit-inner-spin-button,
+  .cf-port-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .cf-port-input { -moz-appearance: textfield; appearance: textfield; }
+
+  /* ── Scan row ── */
+  .cf-scan-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cf-scan-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-family: var(--vscode-font-family);
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--vscode-foreground);
+    white-space: nowrap;
+    transition: background 0.12s;
+  }
+  .cf-scan-btn:hover:not(:disabled) { background: rgba(255,255,255,0.09); }
+  .cf-scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .cf-scan-results {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+  }
+
+  /* ── Device status pill ── */
+  .cf-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .cf-badge.connected    { background: rgba(78,201,78,0.09);   border-color: rgba(78,201,78,0.28);  color: #4ec94e; }
+  .cf-badge.disconnected { background: rgba(244,71,71,0.09);   border-color: rgba(244,71,71,0.3);   color: #f47878; }
+  .cf-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .cf-dot.green { background: #4ec94e; box-shadow: 0 0 5px #4ec94e99; }
+  .cf-dot.red   { background: #f44747; box-shadow: 0 0 5px #f4474799; }
+
+  /* ── Primary action row: Connect + Copy ── */
+  .cf-primary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  /* ── Divider between primary and secondary actions ── */
+  .cf-divider {
+    height: 1px;
+    background: var(--vscode-widget-border, rgba(255,255,255,0.07));
+    margin: 0;
+  }
+
+  /* ── Secondary actions ── */
+  .cf-secondary {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   /* ── Buttons ── */
-  .actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
   .btn {
     width: 100%;
     padding: 7px 12px;
@@ -528,13 +679,14 @@ export function getWirelessHtml(): string {
     align-items: center;
     justify-content: center;
     gap: 7px;
+    line-height: 1;
   }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .btn-primary  { background: #4ec94e22; border-color: #4ec94e55; color: #4ec94e; }
-  .btn-primary:hover:not(:disabled)  { background: #4ec94e33; }
+  .btn-primary  { background: rgba(78,201,78,0.13); border-color: rgba(78,201,78,0.35); color: #4ec94e; }
+  .btn-primary:hover:not(:disabled)  { background: rgba(78,201,78,0.22); }
   .btn-danger   { background: rgba(244,71,71,0.08); border-color: rgba(244,71,71,0.3); color: #f47878; }
   .btn-danger:hover:not(:disabled)   { background: rgba(244,71,71,0.15); }
-  .btn-neutral  { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--vscode-foreground); }
+  .btn-neutral  { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: var(--vscode-foreground); }
   .btn-neutral:hover:not(:disabled)  { background: rgba(255,255,255,0.1); }
 
   /* ── QR ── */
@@ -672,7 +824,6 @@ export function getWirelessHtml(): string {
   .terminal-line.output  { color: rgba(255,255,255,0.8); }
   .terminal-line.error   { color: #f47878; }
   
-  /* ── Device status badge ── */
   .device-badge {
     display: flex;
     align-items: center;
@@ -681,20 +832,19 @@ export function getWirelessHtml(): string {
     border-radius: 6px;
     font-size: 11px;
     font-weight: 500;
-    margin-top: 8px;
     border: 1px solid transparent;
     transition: background 0.2s;
   }
-  .device-badge.connected    { background: rgba(78,201,78,0.09);  border-color: rgba(78,201,78,0.22);  color: #4ec94e; }
-  .device-badge.disconnected { background: rgba(244,71,71,0.07);  border-color: rgba(244,71,71,0.18);  color: #f47878; }
+  .device-badge.connected    { background: rgba(78,201,78,0.09);  border-color: rgba(78,201,78,0.28);  color: #4ec94e; }
+  .device-badge.disconnected { background: rgba(244,71,71,0.09);  border-color: rgba(244,71,71,0.3);   color: #f47878; }
   .device-badge.unknown      { background: rgba(255,255,255,0.04);border-color: rgba(255,255,255,0.1); opacity: 0.55; }
   .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .badge-dot.green { background: #4ec94e; box-shadow: 0 0 4px #4ec94e99; }
-  .badge-dot.red   { background: #f44747; }
+  .badge-dot.green { background: #4ec94e; box-shadow: 0 0 5px #4ec94e99; }
+  .badge-dot.red   { background: #f44747; box-shadow: 0 0 5px #f4474799; }
   .badge-dot.grey  { background: rgba(255,255,255,0.3); }
 
   /* ── Port scan results ── */
-  .scan-area { margin-top: 8px; }
+  .scan-area { margin-top: 0; }
   .port-chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .port-chip {
     padding: 3px 10px;
@@ -709,7 +859,7 @@ export function getWirelessHtml(): string {
     transition: background 0.12s;
   }
   .port-chip:hover { background: rgba(78,201,78,0.22); }
-  .scan-msg { font-size: 11px; opacity: 0.55; display: flex; align-items: center; gap: 6px; }
+  .scan-msg { font-size: 11px; opacity: 0.55; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
   .scan-msg.err { color: #f47878; opacity: 1; }
 
   /* ── Button row (side-by-side) ── */
@@ -794,7 +944,7 @@ export function getWirelessHtml(): string {
       <input class="input" id="pairIp" type="text" placeholder="192.168.x.x" autocomplete="off" />
     </div>
     <div class="field-group">
-      <label class="field-label">Pairing Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from the "Pair device" sub-screen)</span></label>
+      <label class="field-label">Pairing Port <span class="sub-note">(from the "Pair device" sub-screen)</span></label>
       <input class="input" id="pairPort" type="number" placeholder="e.g. 37291" />
     </div>
     <div class="field-group">
@@ -827,30 +977,45 @@ export function getWirelessHtml(): string {
   </div>
 
   <div class="card">
-    <div class="field-group">
-      <label class="field-label">IP Address</label>
-      <input class="input" id="connectIp" type="text" placeholder="192.168.x.x" autocomplete="off" />
-    </div>
-    <div class="field-group" style="margin-bottom:4px">
-      <label class="field-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span>Debug Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from the main Wireless Debugging screen)</span></span>
-        <button class="btn btn-neutral btn-sm" id="btnScanPorts" style="width:auto;padding:3px 10px;font-size:10px">🔍 Scan</button>
-      </label>
-      <input class="input" id="connectPort" type="number" placeholder="e.g. 46019" />
-      <div class="scan-area" id="scanResults"></div>
-    </div>
-    <div id="deviceStatusBadge" class="device-badge unknown hidden">
-      <span class="badge-dot grey" id="badgeDot"></span>
-      <span id="badgeText">—</span>
-    </div>
-    <div class="actions" style="margin-top:10px">
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnConnect">⚡ Connect</button>
-        <button class="btn btn-neutral btn-sm" id="btnCopyCmd" title="Copy adb connect … to clipboard" style="flex:0 0 auto;width:auto;padding:7px 12px">📋 Copy</button>
+    <div class="cf">
+
+      <!-- Combined IP : Port input -->
+      <div>
+        <div style="font-size:10px;opacity:0.45;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Target Device</div>
+        <div class="cf-target">
+          <input class="cf-target-input" id="connectIp" type="text" placeholder="192.168.x.x" autocomplete="off" spellcheck="false" />
+          <span class="cf-sep">:</span>
+          <input class="cf-port-input" id="connectPort" type="number" placeholder="port" />
+        </div>
       </div>
-      <button class="btn btn-neutral" id="btnOpenShell">⌨ Open Shell</button>
-      <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
-      <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
+
+      <!-- Scan row -->
+      <div class="cf-scan-row">
+        <button class="cf-scan-btn" id="btnScanPorts">🔍 Scan ports</button>
+        <div class="cf-scan-results" id="scanResults"></div>
+      </div>
+
+      <!-- Device status badge (hidden until check returns) -->
+      <div id="deviceStatusBadge" class="cf-badge disconnected hidden">
+        <span class="cf-dot red" id="badgeDot"></span>
+        <span id="badgeText">Not in adb devices</span>
+      </div>
+
+      <!-- Primary: Connect + Copy -->
+      <div class="cf-primary-row">
+        <button class="btn btn-primary" id="btnConnect">⚡ Connect</button>
+        <button class="btn btn-neutral" id="btnCopyCmd" title="Copy adb connect … to clipboard">📋 Copy</button>
+      </div>
+
+      <div class="cf-divider"></div>
+
+      <!-- Secondary actions -->
+      <div class="cf-secondary">
+        <button class="btn btn-neutral" id="btnOpenShell">⌨ Open Shell</button>
+        <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
+        <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
+      </div>
+
     </div>
   </div>
 
@@ -1001,19 +1166,20 @@ export function getWirelessHtml(): string {
     if (data.command === 'scan') {
       const s = data.data;
       const area = $('scanResults');
+      const scanBtn = $('btnScanPorts');
       if (s.status === 'scanning') {
-        area.innerHTML = '<div class="scan-msg"><span class="spinner" style="width:9px;height:9px;border-width:1.5px"></span>Scanning ports on ' + escapeHtml($('connectIp').value || '…') + '</div>';
+        area.innerHTML = '<span class="scan-msg"><span class="spinner" style="width:9px;height:9px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:4px"></span>Scanning ' + escapeHtml($('connectIp').value || '…') + '</span>';
       } else if (s.status === 'progress') {
         renderScanPorts(s.ports);
       } else if (s.status === 'done') {
-        $('btnScanPorts').disabled = false;
+        scanBtn.disabled = false;
         renderScanPorts(s.ports);
       } else if (s.status === 'none') {
-        $('btnScanPorts').disabled = false;
-        area.innerHTML = '<div class="scan-msg">No open ADB ports found — ensure Wi-Fi Debugging is enabled</div>';
+        scanBtn.disabled = false;
+        area.innerHTML = '<span class="scan-msg">No open ADB ports found</span>';
       } else if (s.status === 'error') {
-        $('btnScanPorts').disabled = false;
-        area.innerHTML = '<div class="scan-msg err">✕ ' + escapeHtml(s.message) + '</div>';
+        scanBtn.disabled = false;
+        area.innerHTML = '<span class="scan-msg err">✕ ' + escapeHtml(s.message) + '</span>';
       }
       return;
     }
@@ -1022,14 +1188,14 @@ export function getWirelessHtml(): string {
       const badge = $('deviceStatusBadge');
       const dot   = $('badgeDot');
       const txt   = $('badgeText');
-      badge.classList.remove('hidden', 'connected', 'disconnected', 'unknown');
+      badge.classList.remove('hidden', 'connected', 'disconnected');
       if (data.data.connected) {
         badge.classList.add('connected');
-        dot.className = 'badge-dot green';
+        dot.className = 'cf-dot green';
         txt.textContent = 'Connected · ' + escapeHtml(data.data.target || '');
       } else {
         badge.classList.add('disconnected');
-        dot.className = 'badge-dot red';
+        dot.className = 'cf-dot red';
         txt.textContent = 'Not in adb devices';
       }
       return;
@@ -1162,10 +1328,9 @@ export function getWirelessHtml(): string {
   });
 
   function renderScanPorts(ports) {
-    const chips = ports.map(p =>
+    $('scanResults').innerHTML = ports.map(p =>
       '<button class="port-chip" data-port="' + p + '">' + p + '</button>'
     ).join('');
-    $('scanResults').innerHTML = '<div class="port-chips">' + chips + '</div>';
     $('scanResults').querySelectorAll('.port-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         $('connectPort').value = chip.dataset.port;
