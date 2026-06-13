@@ -1,6 +1,6 @@
 import * as net from "net";
 import * as vscode from "vscode";
-import { run } from "./adb.js";
+import { run, scanAdbPorts } from "./adb.js";
 import Bonjour from "bonjour-service";
 import type { Service } from "bonjour-service";
 import * as QRCode from "qrcode";
@@ -86,6 +86,18 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
         case "clearLog":
           this._logLines = [];
           this._sendLogHistory();
+          break;
+        case "scanPorts":
+          await this._scanPorts(msg.ip);
+          break;
+        case "checkDevice":
+          await this._checkDevice(msg.ip, msg.port);
+          break;
+        case "copyToClipboard":
+          vscode.env.clipboard.writeText(msg.text ?? "");
+          break;
+        case "openShell":
+          this._openShell(msg.ip, msg.port);
           break;
       }
     });
@@ -274,6 +286,78 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     const cmd = target ? `adb disconnect ${target}` : "adb disconnect";
     await this._exec(cmd);
     this._post("status", { mode: "idle" });
+  }
+
+  // ── Port scanning ────────────────────────────────────────────────────────
+
+  private _scanGen = 0;
+
+  private async _scanPorts(ip: string) {
+    if (!ip) {
+      this._post("scan", {
+        status: "error",
+        message: "Enter an IP address first",
+      });
+      return;
+    }
+    const gen = ++this._scanGen;
+    const found: number[] = [];
+    this._post("scan", { status: "scanning" });
+    this._log("output", `Scanning ${ip} for open ADB ports…`);
+
+    await scanAdbPorts(
+      ip,
+      (port) => {
+        if (this._scanGen !== gen) {
+          return;
+        }
+        found.push(port);
+        this._post("scan", { status: "progress", ports: [...found] });
+        this._log("output", `  Found open port: ${port}`);
+      },
+      () => this._scanGen !== gen,
+    );
+
+    if (this._scanGen !== gen) {
+      return;
+    }
+    this._post("scan", {
+      status: found.length ? "done" : "none",
+      ports: found,
+    });
+    this._log(
+      found.length ? "output" : "error",
+      found.length
+        ? `Scan complete — ${found.length} port(s) found`
+        : `Scan complete — no open ADB ports found on ${ip}`,
+    );
+  }
+
+  private async _checkDevice(ip: string, port: string) {
+    if (!ip || !port) {
+      this._post("deviceCheck", { connected: false });
+      return;
+    }
+    const r = await run("adb devices");
+    const target = `${ip}:${port}`;
+    const line = r.stdout.split("\n").find((l) => l.startsWith(target));
+    const connected = line ? line.split(/\s+/)[1] === "device" : false;
+    this._post("deviceCheck", { connected, target });
+  }
+
+  private _openShell(ip: string, port: string) {
+    if (!ip || !port) {
+      this._post("status", {
+        mode: "error",
+        message: "Enter IP and port to open a shell",
+      });
+      return;
+    }
+    const term = vscode.window.createTerminal({
+      name: `adb shell · ${ip}:${port}`,
+    });
+    term.sendText(`adb -s ${ip}:${port} shell`);
+    term.show();
   }
 }
 
@@ -587,6 +671,51 @@ export function getWirelessHtml(): string {
   .terminal-line.command { color: var(--vscode-foreground); }
   .terminal-line.output  { color: rgba(255,255,255,0.8); }
   .terminal-line.error   { color: #f47878; }
+  
+  /* ── Device status badge ── */
+  .device-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 8px;
+    border: 1px solid transparent;
+    transition: background 0.2s;
+  }
+  .device-badge.connected    { background: rgba(78,201,78,0.09);  border-color: rgba(78,201,78,0.22);  color: #4ec94e; }
+  .device-badge.disconnected { background: rgba(244,71,71,0.07);  border-color: rgba(244,71,71,0.18);  color: #f47878; }
+  .device-badge.unknown      { background: rgba(255,255,255,0.04);border-color: rgba(255,255,255,0.1); opacity: 0.55; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .badge-dot.green { background: #4ec94e; box-shadow: 0 0 4px #4ec94e99; }
+  .badge-dot.red   { background: #f44747; }
+  .badge-dot.grey  { background: rgba(255,255,255,0.3); }
+
+  /* ── Port scan results ── */
+  .scan-area { margin-top: 8px; }
+  .port-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .port-chip {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    background: rgba(78,201,78,0.1);
+    border: 1px solid rgba(78,201,78,0.26);
+    color: #4ec94e;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.12s;
+  }
+  .port-chip:hover { background: rgba(78,201,78,0.22); }
+  .scan-msg { font-size: 11px; opacity: 0.55; display: flex; align-items: center; gap: 6px; }
+  .scan-msg.err { color: #f47878; opacity: 1; }
+
+  /* ── Button row (side-by-side) ── */
+  .btn-row { display: flex; gap: 6px; }
+  .btn-row .btn { flex: 1; }
+  .btn-sm { padding: 7px 10px; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -702,12 +831,24 @@ export function getWirelessHtml(): string {
       <label class="field-label">IP Address</label>
       <input class="input" id="connectIp" type="text" placeholder="192.168.x.x" autocomplete="off" />
     </div>
-    <div class="field-group">
-      <label class="field-label">Debug Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from "IP address and port" on main screen)</span></label>
+    <div class="field-group" style="margin-bottom:4px">
+      <label class="field-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span>Debug Port <span style="opacity:0.4;font-size:9px;text-transform:none;letter-spacing:0">(from the main Wireless Debugging screen)</span></span>
+        <button class="btn btn-neutral btn-sm" id="btnScanPorts" style="width:auto;padding:3px 10px;font-size:10px">🔍 Scan</button>
+      </label>
       <input class="input" id="connectPort" type="number" placeholder="e.g. 46019" />
+      <div class="scan-area" id="scanResults"></div>
     </div>
-    <div class="actions">
-      <button class="btn btn-primary" id="btnConnect">Connect</button>
+    <div id="deviceStatusBadge" class="device-badge unknown hidden">
+      <span class="badge-dot grey" id="badgeDot"></span>
+      <span id="badgeText">—</span>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnConnect">⚡ Connect</button>
+        <button class="btn btn-neutral btn-sm" id="btnCopyCmd" title="Copy adb connect … to clipboard" style="flex:0 0 auto;width:auto;padding:7px 12px">📋 Copy</button>
+      </div>
+      <button class="btn btn-neutral" id="btnOpenShell">⌨ Open Shell</button>
       <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
       <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
     </div>
@@ -856,6 +997,44 @@ export function getWirelessHtml(): string {
       renderTerminal();
       return;
     }
+
+    if (data.command === 'scan') {
+      const s = data.data;
+      const area = $('scanResults');
+      if (s.status === 'scanning') {
+        area.innerHTML = '<div class="scan-msg"><span class="spinner" style="width:9px;height:9px;border-width:1.5px"></span>Scanning ports on ' + escapeHtml($('connectIp').value || '…') + '</div>';
+      } else if (s.status === 'progress') {
+        renderScanPorts(s.ports);
+      } else if (s.status === 'done') {
+        $('btnScanPorts').disabled = false;
+        renderScanPorts(s.ports);
+      } else if (s.status === 'none') {
+        $('btnScanPorts').disabled = false;
+        area.innerHTML = '<div class="scan-msg">No open ADB ports found — ensure Wi-Fi Debugging is enabled</div>';
+      } else if (s.status === 'error') {
+        $('btnScanPorts').disabled = false;
+        area.innerHTML = '<div class="scan-msg err">✕ ' + escapeHtml(s.message) + '</div>';
+      }
+      return;
+    }
+
+    if (data.command === 'deviceCheck') {
+      const badge = $('deviceStatusBadge');
+      const dot   = $('badgeDot');
+      const txt   = $('badgeText');
+      badge.classList.remove('hidden', 'connected', 'disconnected', 'unknown');
+      if (data.data.connected) {
+        badge.classList.add('connected');
+        dot.className = 'badge-dot green';
+        txt.textContent = 'Connected · ' + escapeHtml(data.data.target || '');
+      } else {
+        badge.classList.add('disconnected');
+        dot.className = 'badge-dot red';
+        txt.textContent = 'Not in adb devices';
+      }
+      return;
+    }
+
     if (data.command !== 'status') { return; }
 
     const s = data.data;
@@ -973,6 +1152,66 @@ export function getWirelessHtml(): string {
   ['connectIp', 'connectPort'].forEach(id =>
     $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') { $('btnConnect').click(); } })
   );
+
+  // ── Port scan ─────────────────────────────────────────────────────────────
+  $('btnScanPorts').addEventListener('click', () => {
+    const ip = $('connectIp').value.trim();
+    $('scanResults').innerHTML = '';
+    $('btnScanPorts').disabled = true;
+    vscode.postMessage({ command: 'scanPorts', ip });
+  });
+
+  function renderScanPorts(ports) {
+    const chips = ports.map(p =>
+      '<button class="port-chip" data-port="' + p + '">' + p + '</button>'
+    ).join('');
+    $('scanResults').innerHTML = '<div class="port-chips">' + chips + '</div>';
+    $('scanResults').querySelectorAll('.port-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        $('connectPort').value = chip.dataset.port;
+        updateDeviceBadge();
+      });
+    });
+  }
+
+  // ── Copy command ──────────────────────────────────────────────────────────
+  $('btnCopyCmd').addEventListener('click', () => {
+    const ip   = $('connectIp').value.trim();
+    const port = $('connectPort').value.trim();
+    if (!ip || !port) {
+      setStatus('connect', makeBanner('error', '✕', 'Enter IP and port first'));
+      return;
+    }
+    vscode.postMessage({ command: 'copyToClipboard', text: 'adb connect ' + ip + ':' + port });
+    const btn = $('btnCopyCmd');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1600);
+  });
+
+  // ── Open shell ────────────────────────────────────────────────────────────
+  $('btnOpenShell').addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'openShell',
+      ip:   $('connectIp').value.trim(),
+      port: $('connectPort').value.trim(),
+    });
+  });
+
+  // ── Device status badge ───────────────────────────────────────────────────
+  function updateDeviceBadge() {
+    const ip   = $('connectIp').value.trim();
+    const port = $('connectPort').value.trim();
+    const badge = $('deviceStatusBadge');
+    if (!ip || !port) { badge.classList.add('hidden'); return; }
+    badge.classList.remove('hidden');
+    vscode.postMessage({ command: 'checkDevice', ip, port });
+  }
+
+  ['connectIp', 'connectPort'].forEach(id =>
+    $(id)?.addEventListener('input', updateDeviceBadge)
+  );
+  setInterval(() => { if (activeTab === 'connect') { updateDeviceBadge(); } }, 3000);
 
   // ── Terminal ─────────────────────────────────────────────────────────────
   const terminalEntries = [];

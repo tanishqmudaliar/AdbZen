@@ -159,3 +159,56 @@ export async function getAdbStatus(): Promise<AdbStatus> {
     operation: null,
   };
 }
+
+export async function scanAdbPorts(
+  ip: string,
+  onFound?: (port: number) => void,
+  isCancelled?: () => boolean,
+): Promise<number[]> {
+  const candidates: number[] = [
+    5554, 5555, 5556, 5557, 5558, 5559, 5560, 5580, 5585,
+  ];
+  for (let p = 37000; p <= 47000; p++) {
+    candidates.push(p);
+  }
+
+  const found: number[] = [];
+  const BATCH = 400;
+  const TIMEOUT_MS = 250;
+
+  for (let i = 0; i < candidates.length; i += BATCH) {
+    if (isCancelled?.()) {
+      break;
+    }
+    const batch = candidates.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map(
+        (port) =>
+          new Promise<number | null>((resolve) => {
+            const s = new net.Socket();
+            let done = false;
+            const finish = (ok: boolean) => {
+              if (done) {
+                return;
+              }
+              done = true;
+              s.destroy();
+              resolve(ok ? port : null);
+            };
+            s.setTimeout(TIMEOUT_MS);
+            s.once("connect", () => finish(true));
+            s.once("timeout", () => finish(false));
+            s.once("error", () => finish(false));
+            s.connect(port, ip);
+          }),
+      ),
+    );
+    for (const p of results) {
+      if (p !== null) {
+        found.push(p);
+        onFound?.(p);
+      }
+    }
+  }
+  return found;
+}
