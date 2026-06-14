@@ -75,6 +75,7 @@ export function getAdbZenHtml(): string {
   .meta-value.ok    { color: #4ec94e; }
   .meta-value.warn  { color: #e5a220; }
   .meta-value.error { color: #f44747; }
+  .meta-value.blue  { color: #6cb6ff; }
 
   .banner {
     display: flex;
@@ -197,11 +198,6 @@ export function getAdbZenHtml(): string {
     font-weight: 700;
     word-break: break-all;
     line-height: 1.3;
-  }
-  .device-model {
-    font-size: 11px;
-    opacity: 0.65;
-    margin-top: 2px;
   }
   .device-badges {
     display: flex;
@@ -345,6 +341,7 @@ export function getAdbZenHtml(): string {
       <div class="meta-row"><span class="meta-label">Connected</span><span class="meta-value" id="metaConnected">—</span></div>
       <div class="meta-row"><span class="meta-label">USB devices</span><span class="meta-value" id="metaUsb">—</span></div>
       <div class="meta-row"><span class="meta-label">Wireless devices</span><span class="meta-value" id="metaWireless">—</span></div>
+      <div class="meta-row"><span class="meta-label">Emulators</span><span class="meta-value" id="metaEmulators">—</span></div>
       <div class="meta-row"><span class="meta-label">Unauthorized</span><span class="meta-value" id="metaUnauthorized">—</span></div>
     </div>
   </div>
@@ -438,9 +435,10 @@ export function getAdbZenHtml(): string {
       const tone = sm.tone;
 
       const metaParts = [
+        d.model   ? 'Model: '   + escapeHtml(d.model)   : '',
         d.product ? 'Product: ' + escapeHtml(d.product) : '',
-        d.device  ? 'Codename: ' + escapeHtml(d.device)  : '',
-        d.usb     ? 'USB: '     + escapeHtml(d.usb)      : '',
+        d.device  ? 'Codename: ' + escapeHtml(d.device) : '',
+        d.usb     ? 'USB: '     + escapeHtml(d.usb)     : '',
       ].filter(Boolean);
 
       const metaHtml = metaParts.length
@@ -456,7 +454,6 @@ export function getAdbZenHtml(): string {
           '<div class="device-top">' +
             '<div class="device-info">' +
               '<div class="device-serial">' + escapeHtml(d.serial) + '</div>' +
-              (d.model ? '<div class="device-model">' + escapeHtml(d.model) + '</div>' : '') +
             '</div>' +
             '<div class="device-badges">' +
               '<span class="pill ' + sm.pillClass + '">' + escapeHtml(sm.label) + '</span>' +
@@ -544,6 +541,7 @@ export function getAdbZenHtml(): string {
     const connected    = countBy(devices, (d) => d.state === 'device');
     const usb          = countBy(devices, (d) => d.connectionType === 'usb');
     const wireless     = countBy(devices, (d) => d.connectionType === 'wireless');
+    const emulators    = countBy(devices, (d) => d.connectionType === 'emulator');
     const unauthorized = countBy(devices, (d) => d.state === 'unauthorized');
 
     $('metaVersion').textContent     = s.version ?? '—';
@@ -555,6 +553,8 @@ export function getAdbZenHtml(): string {
     $('metaUsb').className           = 'meta-value ' + (usb > 0 ? 'ok' : '');
     $('metaWireless').textContent    = String(wireless);
     $('metaWireless').className      = 'meta-value ' + (wireless > 0 ? 'warn' : '');
+    $('metaEmulators').textContent   = String(emulators);
+    $('metaEmulators').className     = 'meta-value ' + (emulators > 0 ? 'blue' : '');
     $('metaUnauthorized').textContent = String(unauthorized);
     $('metaUnauthorized').className   = 'meta-value ' + (unauthorized > 0 ? 'warn' : '');
 

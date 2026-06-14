@@ -51,7 +51,9 @@ export class ShellViewProvider implements vscode.WebviewViewProvider {
     const term = vscode.window.createTerminal({
       name: `adb shell · ${label}`,
     });
-    term.sendText(`adb -s ${serial} shell`);
+    // Quote serial in case it contains spaces (e.g. mDNS TLS serials)
+    const s = serial.includes(" ") ? `"${serial}"` : serial;
+    term.sendText(`adb -s ${s} shell`);
     term.show();
   }
 
@@ -59,10 +61,12 @@ export class ShellViewProvider implements vscode.WebviewViewProvider {
     if (!target.trim()) {
       return;
     }
+    const t = target.trim();
     const term = vscode.window.createTerminal({
-      name: `adb shell · ${target.trim()}`,
+      name: `adb shell · ${t}`,
     });
-    term.sendText(`adb -s ${target.trim()} shell`);
+    const s = t.includes(" ") ? `"${t}"` : t;
+    term.sendText(`adb -s ${s} shell`);
     term.show();
   }
 }
@@ -157,11 +161,6 @@ export function getShellHtml(): string {
     font-weight: 700;
     word-break: break-all;
     line-height: 1.3;
-  }
-  .device-model {
-    font-size: 11px;
-    opacity: 0.65;
-    margin-top: 2px;
   }
   .device-badges {
     display: flex;
@@ -385,11 +384,12 @@ export function getShellHtml(): string {
       // Human-readable label: prefer model, else shorten serial
       const label = d.model || d.serial;
 
-      // Meta chips: product, device codename, usb id
+      // Meta chips: model, product, device codename, usb id
       const metaParts = [
+        d.model   ? 'Model: '   + escapeHtml(d.model)   : '',
         d.product ? 'Product: ' + escapeHtml(d.product) : '',
-        d.device  ? 'Codename: ' + escapeHtml(d.device)  : '',
-        d.usb     ? 'USB: '     + escapeHtml(d.usb)      : '',
+        d.device  ? 'Codename: ' + escapeHtml(d.device) : '',
+        d.usb     ? 'USB: '     + escapeHtml(d.usb)     : '',
       ].filter(Boolean);
 
       const metaHtml = metaParts.length
@@ -405,7 +405,6 @@ export function getShellHtml(): string {
           <div class="device-top">
             <div class="device-info">
               <div class="device-serial">\${escapeHtml(d.serial)}</div>
-              \${d.model ? '<div class="device-model">' + escapeHtml(d.model) + '</div>' : ''}
             </div>
             <div class="device-badges">
               <span class="pill \${escapeHtml(sm.pillClass)}">\${escapeHtml(sm.label)}</span>
@@ -426,17 +425,6 @@ export function getShellHtml(): string {
         </div>
       \`;
     }).join('');
-
-    // Wire up shell buttons
-    list.querySelectorAll('.shell-btn:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => {
-        vscode.postMessage({
-          command: 'openShell',
-          serial: btn.dataset.serial,
-          label:  btn.dataset.label,
-        });
-      });
-    });
   }
 
   // ── Message handler ──────────────────────────────────────────────────────
@@ -453,6 +441,20 @@ export function getShellHtml(): string {
   $('refreshBtn').addEventListener('click', () => {
     $('refreshBtn').classList.add('spinning');
     vscode.postMessage({ command: 'refresh' });
+  });
+
+  // ── Shell button – event delegation on the stable container ──────────────
+  // Using delegation instead of per-render listeners so clicks always work
+  // even while renderDevices is in the middle of an innerHTML replacement.
+
+  $('deviceList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.shell-btn');
+    if (!btn || btn.disabled) { return; }
+    vscode.postMessage({
+      command: 'openShell',
+      serial: btn.dataset.serial,
+      label:  btn.dataset.label,
+    });
   });
 
   // ── Custom shell ─────────────────────────────────────────────────────────
