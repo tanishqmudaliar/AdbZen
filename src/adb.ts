@@ -1,5 +1,7 @@
 import { exec } from "child_process";
+import * as fs from "fs";
 import * as net from "net";
+import * as path from "path";
 
 export type AdbDeviceState =
   | "device"
@@ -31,6 +33,14 @@ export type AdbStatus = {
   devices: AdbDevice[];
   error: string | null;
   operation: string | null;
+  platformInfo: AdbPlatformInfo | null;
+};
+
+export type AdbPlatformInfo = {
+  platform: "darwin" | "win32" | "linux";
+  packageManagers: string[];
+  pathIssue: boolean;
+  adbFoundAt: string | null;
 };
 
 type ExecResult = { stdout: string; stderr: string; code: number | null };
@@ -141,18 +151,127 @@ export async function isAdbServerListening(): Promise<boolean> {
   });
 }
 
+function getPlatformName(): "darwin" | "win32" | "linux" {
+  const p = process.platform;
+  if (p === "darwin" || p === "win32") return p;
+  return "linux";
+}
+
+async function findAdbInCommonPaths(): Promise<string | null> {
+  const platform = getPlatformName();
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const candidates: string[] = [];
+
+  if (platform === "darwin") {
+    candidates.push(
+      "/usr/local/bin/adb",
+      "/opt/homebrew/bin/adb",
+      path.join(home, "Library/Android/sdk/platform-tools/adb"),
+      path.join(home, "Android/sdk/platform-tools/adb"),
+    );
+  } else if (platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA ?? "";
+    candidates.push(
+      path.join(localAppData, "Android", "Sdk", "platform-tools", "adb.exe"),
+      "C:\\Android\\platform-tools\\adb.exe",
+      "C:\\Program Files\\Android\\platform-tools\\adb.exe",
+      "C:\\Program Files (x86)\\Android\\platform-tools\\adb.exe",
+    );
+  } else {
+    candidates.push(
+      "/usr/bin/adb",
+      "/usr/local/bin/adb",
+      path.join(home, "Android/Sdk/platform-tools/adb"),
+      path.join(home, ".android/sdk/platform-tools/adb"),
+    );
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+async function detectPackageManagers(): Promise<string[]> {
+  const platform = getPlatformName();
+
+  const checks: Array<{ name: string; cmd: string }> =
+    platform === "darwin"
+      ? [{ name: "brew", cmd: "which brew" }]
+      : platform === "win32"
+        ? [
+            { name: "winget", cmd: "where winget" },
+            { name: "choco", cmd: "where choco" },
+            { name: "scoop", cmd: "where scoop" },
+          ]
+        : [
+            { name: "apt", cmd: "which apt" },
+            { name: "apt-get", cmd: "which apt-get" },
+            { name: "dnf", cmd: "which dnf" },
+            { name: "pacman", cmd: "which pacman" },
+            { name: "zypper", cmd: "which zypper" },
+          ];
+
+  const results = await Promise.all(
+    checks.map(async ({ name, cmd }) => {
+      const r = await run(cmd);
+      return r.code === 0 && r.stdout.trim() ? name : null;
+    }),
+  );
+
+  return results.filter((n): n is string => n !== null);
+}
+
+export function getInstallCommand(packageManager: string): string {
+  const commands: Record<string, string> = {
+    brew: "brew install android-platform-tools",
+    winget: "winget install Google.PlatformTools",
+    choco: "choco install adb",
+    scoop: "scoop install adb",
+    apt: "sudo apt update && sudo apt install -y adb",
+    "apt-get": "sudo apt-get update && sudo apt-get install -y adb",
+    dnf: "sudo dnf install -y android-tools",
+    pacman: "sudo pacman -S --noconfirm android-tools",
+    zypper: "sudo zypper install -y android-tools",
+  };
+  return commands[packageManager] ?? "";
+}
+
+async function getPlatformInfo(): Promise<AdbPlatformInfo> {
+  const platform = getPlatformName();
+  const [packageManagers, adbFoundAt] = await Promise.all([
+    detectPackageManagers(),
+    findAdbInCommonPaths(),
+  ]);
+  return {
+    platform,
+    packageManagers,
+    pathIssue: adbFoundAt !== null,
+    adbFoundAt,
+  };
+}
+
 export async function getAdbStatus(): Promise<AdbStatus> {
-  const { stdout, stderr } = await run("adb version");
-  if (!stdout && !stderr) {
+  const { stdout } = await run("adb version");
+  const isInstalled = /android debug bridge/i.test(stdout);
+
+  if (!isInstalled) {
+    const platformInfo = await getPlatformInfo();
     return {
       installed: false,
       version: null,
       serverRunning: false,
       devices: [],
-      error: "ADB not found in PATH",
+      error: null,
       operation: null,
+      platformInfo,
     };
   }
+
   const match = (stdout.split("\n")[0] ?? "").match(/Version\s+([\d.]+)/i);
   const version = match ? match[1] : (stdout.split("\n")[0] ?? "");
   const serverRunning = await isAdbServerListening();
@@ -173,6 +292,7 @@ export async function getAdbStatus(): Promise<AdbStatus> {
     devices,
     error: mismatch ? "ADB server version mismatch detected" : null,
     operation: null,
+    platformInfo: null,
   };
 }
 

@@ -305,6 +305,82 @@ export function getAdbZenHtml(): string {
     background: var(--vscode-widget-border, rgba(255,255,255,0.07));
     animation: shimmer 1.4s infinite;
   }
+
+  /* ── Not Installed Card ── */
+  .ni-hero {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ni-icon-wrap { font-size: 22px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+  .ni-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .ni-desc { font-size: 11px; line-height: 1.55; opacity: 0.65; }
+
+  .ni-path-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+    background: rgba(229,162,32,0.08);
+    border: 1px solid rgba(229,162,32,0.25);
+    color: #e5a220;
+    margin-bottom: 10px;
+  }
+  .ni-path-banner code {
+    font-family: var(--vscode-editor-font-family, monospace);
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    word-break: break-all;
+  }
+
+  .ni-actions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+
+  .ni-details {
+    border-radius: 6px;
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+    overflow: hidden;
+  }
+  .ni-details summary {
+    padding: 8px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    opacity: 0.65;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.15s;
+  }
+  .ni-details summary::-webkit-details-marker { display: none; }
+  .ni-details summary::before {
+    content: '▶';
+    font-size: 8px;
+    display: inline-block;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .ni-details[open] summary::before { transform: rotate(90deg); }
+  .ni-details summary:hover { opacity: 1; }
+  .ni-manual {
+    padding: 10px 12px;
+    border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  }
+  .ni-manual ol { padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
+  .ni-manual li { font-size: 11px; line-height: 1.55; }
+  .ni-manual code {
+    font-family: var(--vscode-editor-font-family, monospace);
+    background: rgba(255,255,255,0.07);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+  }
   @keyframes shimmer { 0%,100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 </style>
 </head>
@@ -322,8 +398,37 @@ export function getAdbZenHtml(): string {
     <span>⚠</span><span id="errorText"></span>
   </div>
 
-  <div id="notInstalled" class="banner warn-banner hidden">
-    ADB not found in PATH. Install Android Platform Tools and ensure <code>adb</code> is accessible from your terminal.
+  <div id="notInstalled" class="hidden">
+    <div class="card">
+      <div class="ni-hero">
+        <div class="ni-icon-wrap">📦</div>
+        <div>
+          <div class="ni-title">ADB Not Installed</div>
+          <div class="ni-desc">Android Debug Bridge (ADB) is required to communicate with Android devices. It's a free tool from Google.</div>
+        </div>
+      </div>
+
+      <div id="niPathBanner" class="ni-path-banner hidden">
+        <span>⚠</span>
+        <span>ADB was found at <code id="niAdbPath"></code> but is not on your PATH. Try restarting VS Code first.</span>
+      </div>
+
+      <div class="ni-actions">
+        <button id="btnInstallAdb" class="btn btn-primary hidden">
+          <span class="btn-icon">⬇</span>
+          <span id="btnInstallLabel">Install ADB</span>
+        </button>
+        <button id="btnDownloadAdb" class="btn btn-neutral">
+          <span class="btn-icon">🌐</span>
+          Open Download Page
+        </button>
+      </div>
+
+      <details class="ni-details">
+        <summary>Manual installation steps</summary>
+        <div id="niManualSteps" class="ni-manual"></div>
+      </details>
+    </div>
   </div>
 
   <div class="card" id="statusCard">
@@ -381,6 +486,7 @@ export function getAdbZenHtml(): string {
   const vscode = acquireVsCodeApi();
   const terminalEntries = [];
   const $ = (id) => document.getElementById(id);
+  let _installingAdb = false;
 
   function escapeHtml(text) {
     return String(text)
@@ -468,12 +574,80 @@ export function getAdbZenHtml(): string {
   }
 
   $('refreshBtn').addEventListener('click', () => send('refresh', true));
+  $('btnInstallAdb').addEventListener('click', () => {
+    const pm = $('btnInstallAdb').dataset.packageManager;
+    if (!pm) { return; }
+    _installingAdb = true;
+    $('btnInstallLabel').textContent = 'Installing… check the terminal';
+    $('btnInstallAdb').disabled = true;
+    vscode.postMessage({ command: 'installAdb', packageManager: pm });
+  });
+  $('btnDownloadAdb').addEventListener('click', () => {
+    vscode.postMessage({ command: 'openDownloadPage' });
+  });
   $('clearLogBtn').addEventListener('click', () => { vscode.postMessage({ command: 'clearLog' }); });
   $('btnStart').addEventListener('click',   () => send('start',   false));
   $('btnKill').addEventListener('click',    () => send('kill',    false));
   $('btnRestart').addEventListener('click', () => send('restart', false));
 
   setInterval(() => send('refresh', false), 3500);
+
+  function getManualSteps(platform) {
+    if (platform === 'darwin') {
+      return '<ol>' +
+        '<li>Install <strong>Homebrew</strong> from <code>brew.sh</code> if not already installed</li>' +
+        '<li>Run: <code>brew install android-platform-tools</code></li>' +
+        '<li>Restart VS Code — ADB will be detected automatically</li>' +
+      '</ol>';
+    }
+    if (platform === 'win32') {
+      return '<ol>' +
+        '<li>Click <strong>Open Download Page</strong> above and download the Windows zip</li>' +
+        '<li>Extract it to a permanent folder like <code>C:\\platform-tools</code></li>' +
+        '<li>Add that folder to your <strong>System PATH</strong> (search "Edit environment variables")</li>' +
+        '<li>Restart VS Code — ADB will be detected automatically</li>' +
+      '</ol>';
+    }
+    return '<ol>' +
+      '<li>Ubuntu / Debian: <code>sudo apt update && sudo apt install adb</code></li>' +
+      '<li>Fedora: <code>sudo dnf install android-tools</code></li>' +
+      '<li>Arch: <code>sudo pacman -S android-tools</code></li>' +
+      '<li>Restart VS Code — ADB will be detected automatically</li>' +
+    '</ol>';
+  }
+
+  function applyPlatformInfo(platformInfo) {
+    if (!platformInfo) { return; }
+    const { platform, packageManagers, pathIssue, adbFoundAt } = platformInfo;
+
+    // PATH issue banner
+    if (pathIssue && adbFoundAt) {
+      $('niPathBanner').classList.remove('hidden');
+      $('niAdbPath').textContent = adbFoundAt;
+    } else {
+      $('niPathBanner').classList.add('hidden');
+    }
+
+    // Install button — only update when not mid-install
+    if (!_installingAdb) {
+      if (Array.isArray(packageManagers) && packageManagers.length > 0) {
+        const pm = packageManagers[0];
+        const pmLabels = {
+          brew: 'Homebrew', winget: 'winget', choco: 'Chocolatey',
+          scoop: 'Scoop', apt: 'apt', 'apt-get': 'apt-get',
+          dnf: 'dnf', pacman: 'pacman', zypper: 'zypper',
+        };
+        $('btnInstallLabel').textContent = 'Install via ' + (pmLabels[pm] || pm);
+        $('btnInstallAdb').dataset.packageManager = pm;
+        $('btnInstallAdb').disabled = false;
+        $('btnInstallAdb').classList.remove('hidden');
+      } else {
+        $('btnInstallAdb').classList.add('hidden');
+      }
+    }
+
+    $('niManualSteps').innerHTML = getManualSteps(platform);
+  }
 
   window.addEventListener('message', ({ data }) => {
     if (data.command === 'logHistory') {
@@ -502,8 +676,12 @@ export function getAdbZenHtml(): string {
 
     if (!s.installed) {
       $('errorBanner').classList.add('hidden');
+      applyPlatformInfo(s.platformInfo);
       return;
     }
+
+    // ADB is now installed — reset install state if it just appeared
+    _installingAdb = false;
 
     if (s.error) {
       $('errorBanner').classList.remove('hidden');

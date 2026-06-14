@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
-import { getAdbStatus, isAdbServerListening, run } from "./adb.js";
+import {
+  getAdbStatus,
+  isAdbServerListening,
+  run,
+  getInstallCommand,
+} from "./adb.js";
 import { getAdbZenHtml } from "./webview.js";
 import { WirelessViewProvider } from "./wireless.js";
 import { ShellViewProvider } from "./shell.js";
@@ -53,6 +58,16 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
         case "clearLog":
           this._logLines.length = 0;
           this._sendLogHistory();
+          break;
+        case "installAdb":
+          this._installAdb(msg.packageManager as string);
+          break;
+        case "openDownloadPage":
+          await vscode.env.openExternal(
+            vscode.Uri.parse(
+              "https://developer.android.com/tools/releases/platform-tools",
+            ),
+          );
           break;
       }
     });
@@ -156,6 +171,16 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     );
     this._operation = null;
     await this._sendStatus();
+  }
+
+  private _installAdb(packageManager: string) {
+    const cmd = getInstallCommand(packageManager);
+    if (!cmd) {
+      return;
+    }
+    const term = vscode.window.createTerminal({ name: "Install ADB" });
+    term.sendText(cmd);
+    term.show();
   }
 }
 
