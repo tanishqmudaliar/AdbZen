@@ -96,9 +96,6 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
         case "copyToClipboard":
           vscode.env.clipboard.writeText(msg.text ?? "");
           break;
-        case "openShell":
-          this._openShell(msg.ip, msg.port);
-          break;
       }
     });
 
@@ -131,7 +128,6 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage({ command, data });
   }
 
-  /** Run a command, log it, return result. */
   private async _exec(cmd: string) {
     this._log("command", `> ${cmd}`);
     const r = await run(cmd);
@@ -344,21 +340,6 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     const connected = line ? line.split(/\s+/)[1] === "device" : false;
     this._post("deviceCheck", { connected, target });
   }
-
-  private _openShell(ip: string, port: string) {
-    if (!ip || !port) {
-      this._post("status", {
-        mode: "error",
-        message: "Enter IP and port to open a shell",
-      });
-      return;
-    }
-    const term = vscode.window.createTerminal({
-      name: `adb shell · ${ip}:${port}`,
-    });
-    term.sendText(`adb -s ${ip}:${port} shell`);
-    term.show();
-  }
 }
 
 // ─── HTML ─────────────────────────────────────────────────────────────────────
@@ -494,7 +475,7 @@ export function getWirelessHtml(): string {
     letter-spacing: 0.05em;
   }
   .field-label .sub-note {
-    opacity: 0.75; /* relative to parent's 0.5 → visually ~0.37 */
+    opacity: 0.75;
     font-size: 9px;
     text-transform: none;
     letter-spacing: 0;
@@ -514,7 +495,6 @@ export function getWirelessHtml(): string {
   }
   .input:focus { border-color: var(--vscode-focusBorder, #007fd4); }
   .input::placeholder { opacity: 0.35; }
-  /* Hide number spinner arrows — they break the layout */
   .input[type="number"]::-webkit-inner-spin-button,
   .input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
@@ -526,16 +506,9 @@ export function getWirelessHtml(): string {
     font-family: var(--vscode-editor-font-family, monospace);
   }
 
-  /* ══ Connect card — complete redesign ══ */
+  /* ── Connect card ── */
+  .cf { display: flex; flex-direction: column; gap: 10px; }
 
-  /* Outer shell: tight column, uniform gap everywhere */
-  .cf {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  /* ── Target row: IP + colon + Port inline ── */
   .cf-target {
     display: flex;
     align-items: stretch;
@@ -546,9 +519,7 @@ export function getWirelessHtml(): string {
     background: var(--vscode-input-background, rgba(255,255,255,0.05));
     transition: border-color 0.15s;
   }
-  .cf-target:focus-within {
-    border-color: var(--vscode-focusBorder, #007fd4);
-  }
+  .cf-target:focus-within { border-color: var(--vscode-focusBorder, #007fd4); }
   .cf-target-input {
     flex: 1 1 0;
     min-width: 0;
@@ -585,17 +556,11 @@ export function getWirelessHtml(): string {
     text-align: left;
   }
   .cf-port-input::placeholder { opacity: 0.3; }
-  /* kill spinners on the port number input */
   .cf-port-input::-webkit-inner-spin-button,
   .cf-port-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .cf-port-input { -moz-appearance: textfield; appearance: textfield; }
 
-  /* ── Scan row ── */
-  .cf-scan-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  .cf-scan-row { display: flex; align-items: center; gap: 8px; }
   .cf-scan-btn {
     flex: 0 0 auto;
     display: flex;
@@ -624,7 +589,6 @@ export function getWirelessHtml(): string {
     align-items: center;
   }
 
-  /* ── Device status pill ── */
   .cf-badge {
     display: flex;
     align-items: center;
@@ -636,31 +600,26 @@ export function getWirelessHtml(): string {
     border: 1px solid transparent;
     transition: background 0.2s, border-color 0.2s;
   }
-  .cf-badge.connected    { background: rgba(78,201,78,0.09);   border-color: rgba(78,201,78,0.28);  color: #4ec94e; }
-  .cf-badge.disconnected { background: rgba(244,71,71,0.09);   border-color: rgba(244,71,71,0.3);   color: #f47878; }
+  .cf-badge.connected    { background: rgba(78,201,78,0.09);  border-color: rgba(78,201,78,0.28);  color: #4ec94e; }
+  .cf-badge.disconnected { background: rgba(244,71,71,0.09);  border-color: rgba(244,71,71,0.3);   color: #f47878; }
   .cf-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .cf-dot.green { background: #4ec94e; box-shadow: 0 0 5px #4ec94e99; }
   .cf-dot.red   { background: #f44747; box-shadow: 0 0 5px #f4474799; }
 
-  /* ── Primary action row: Connect + Copy ── */
-  .cf-primary-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
+  .cf-primary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cf-divider { height: 1px; background: var(--vscode-widget-border, rgba(255,255,255,0.07)); margin: 0; }
+  .cf-secondary { display: flex; flex-direction: column; gap: 6px; }
 
-  /* ── Divider between primary and secondary actions ── */
-  .cf-divider {
-    height: 1px;
-    background: var(--vscode-widget-border, rgba(255,255,255,0.07));
-    margin: 0;
-  }
-
-  /* ── Secondary actions ── */
-  .cf-secondary {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  /* ── Shell hint ── */
+  .shell-hint {
+    font-size: 10.5px;
+    opacity: 0.55;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: rgba(108,182,255,0.06);
+    border: 1px solid rgba(108,182,255,0.16);
+    color: #6cb6ff;
+    line-height: 1.5;
   }
 
   /* ── Buttons ── */
@@ -705,9 +664,9 @@ export function getWirelessHtml(): string {
     align-items: flex-start;
     gap: 8px;
   }
-  .status-banner.ok    { background: rgba(78,201,78,0.08);   border: 1px solid rgba(78,201,78,0.25);   color: #4ec94e; }
-  .status-banner.warn  { background: rgba(229,162,32,0.08);  border: 1px solid rgba(229,162,32,0.25);  color: #e5a220; }
-  .status-banner.error { background: rgba(244,71,71,0.08);   border: 1px solid rgba(244,71,71,0.25);   color: #f47878; }
+  .status-banner.ok    { background: rgba(78,201,78,0.08);  border: 1px solid rgba(78,201,78,0.25);  color: #4ec94e; }
+  .status-banner.warn  { background: rgba(229,162,32,0.08); border: 1px solid rgba(229,162,32,0.25); color: #e5a220; }
+  .status-banner.error { background: rgba(244,71,71,0.08);  border: 1px solid rgba(244,71,71,0.25);  color: #f47878; }
 
   .spinner {
     display: inline-block;
@@ -764,7 +723,7 @@ export function getWirelessHtml(): string {
     max-width: 260px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
-  .modal-icon { font-size: 20px; text-align: center; margin-bottom: 8px; }
+  .modal-icon  { font-size: 20px; text-align: center; margin-bottom: 8px; }
   .modal-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; text-align: center; }
   .modal-body  { font-size: 11px; line-height: 1.55; opacity: 0.75; margin-bottom: 14px; text-align: center; }
   .modal-body code {
@@ -823,28 +782,8 @@ export function getWirelessHtml(): string {
   .terminal-line.command { color: var(--vscode-foreground); }
   .terminal-line.output  { color: rgba(255,255,255,0.8); }
   .terminal-line.error   { color: #f47878; }
-  
-  .device-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 9px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    border: 1px solid transparent;
-    transition: background 0.2s;
-  }
-  .device-badge.connected    { background: rgba(78,201,78,0.09);  border-color: rgba(78,201,78,0.28);  color: #4ec94e; }
-  .device-badge.disconnected { background: rgba(244,71,71,0.09);  border-color: rgba(244,71,71,0.3);   color: #f47878; }
-  .device-badge.unknown      { background: rgba(255,255,255,0.04);border-color: rgba(255,255,255,0.1); opacity: 0.55; }
-  .badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .badge-dot.green { background: #4ec94e; box-shadow: 0 0 5px #4ec94e99; }
-  .badge-dot.red   { background: #f44747; box-shadow: 0 0 5px #f4474799; }
-  .badge-dot.grey  { background: rgba(255,255,255,0.3); }
 
   /* ── Port scan results ── */
-  .scan-area { margin-top: 0; }
   .port-chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .port-chip {
     padding: 3px 10px;
@@ -861,11 +800,6 @@ export function getWirelessHtml(): string {
   .port-chip:hover { background: rgba(78,201,78,0.22); }
   .scan-msg { font-size: 11px; opacity: 0.55; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
   .scan-msg.err { color: #f47878; opacity: 1; }
-
-  /* ── Button row (side-by-side) ── */
-  .btn-row { display: flex; gap: 6px; }
-  .btn-row .btn { flex: 1; }
-  .btn-sm { padding: 7px 10px; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -979,7 +913,6 @@ export function getWirelessHtml(): string {
   <div class="card">
     <div class="cf">
 
-      <!-- Combined IP : Port input -->
       <div>
         <div style="font-size:10px;opacity:0.45;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Target Device</div>
         <div class="cf-target">
@@ -989,19 +922,16 @@ export function getWirelessHtml(): string {
         </div>
       </div>
 
-      <!-- Scan row -->
       <div class="cf-scan-row">
         <button class="cf-scan-btn" id="btnScanPorts">🔍 Scan ports</button>
         <div class="cf-scan-results" id="scanResults"></div>
       </div>
 
-      <!-- Device status badge (hidden until check returns) -->
       <div id="deviceStatusBadge" class="cf-badge disconnected hidden">
         <span class="cf-dot red" id="badgeDot"></span>
         <span id="badgeText">Not in adb devices</span>
       </div>
 
-      <!-- Primary: Connect + Copy -->
       <div class="cf-primary-row">
         <button class="btn btn-primary" id="btnConnect">⚡ Connect</button>
         <button class="btn btn-neutral" id="btnCopyCmd" title="Copy adb connect … to clipboard">📋 Copy</button>
@@ -1009,9 +939,8 @@ export function getWirelessHtml(): string {
 
       <div class="cf-divider"></div>
 
-      <!-- Secondary actions -->
       <div class="cf-secondary">
-        <button class="btn btn-neutral" id="btnOpenShell">⌨ Open Shell</button>
+        <div class="shell-hint">⌨ To open a shell, use the <strong>Shell</strong> panel — it shows all connected devices (USB, wireless &amp; emulators).</div>
         <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
         <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
       </div>
@@ -1120,7 +1049,7 @@ export function getWirelessHtml(): string {
   // ── Disconnect confirmation modal ────────────────────────────────────────
   let pendingDisconnect = null;
 
-  function showDisconnectModal(ip, port, labelText) {
+  function showDisconnectModal(ip, port) {
     pendingDisconnect = { ip, port };
     const body = ip && port
       ? 'Disconnect <code>' + escapeHtml(ip + ':' + port) + '</code> from ADB?'
@@ -1141,7 +1070,6 @@ export function getWirelessHtml(): string {
     pendingDisconnect = null;
   });
 
-  // Close modal on backdrop click
   $('disconnect-modal').addEventListener('click', (e) => {
     if (e.target === $('disconnect-modal')) {
       $('disconnect-modal').classList.add('hidden');
@@ -1311,7 +1239,6 @@ export function getWirelessHtml(): string {
     vscode.postMessage({ command: 'clearLog' });
   });
 
-  // Enter key shortcuts
   ['pairIp', 'pairPort', 'pairCode'].forEach(id =>
     $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') { $('btnPair').click(); } })
   );
@@ -1352,15 +1279,6 @@ export function getWirelessHtml(): string {
     const orig = btn.textContent;
     btn.textContent = '✓ Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1600);
-  });
-
-  // ── Open shell ────────────────────────────────────────────────────────────
-  $('btnOpenShell').addEventListener('click', () => {
-    vscode.postMessage({
-      command: 'openShell',
-      ip:   $('connectIp').value.trim(),
-      port: $('connectPort').value.trim(),
-    });
   });
 
   // ── Device status badge ───────────────────────────────────────────────────

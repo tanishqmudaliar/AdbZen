@@ -33,6 +33,12 @@
           "id": "adbzen.wirelessView",
           "name": "Wireless Pairing",
           "icon": "media/icon.svg"
+        },
+        {
+          "type": "webview",
+          "id": "adbzen.shellView",
+          "name": "Shell",
+          "icon": "media/icon.svg"
         }
       ]
     },

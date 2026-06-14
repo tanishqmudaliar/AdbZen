@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getAdbStatus, isAdbServerListening, run } from "./adb.js";
 import { getAdbZenHtml } from "./webview.js";
 import { WirelessViewProvider } from "./wireless.js";
+import { ShellViewProvider } from "./shell.js";
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
@@ -12,6 +13,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(
       "adbzen.wirelessView",
       new WirelessViewProvider(),
+    ),
+    vscode.window.registerWebviewViewProvider(
+      "adbzen.shellView",
+      new ShellViewProvider(),
     ),
     vscode.commands.registerCommand("adbzen.openPanel", () =>
       vscode.commands.executeCommand("workbench.view.extension.adbzen-sidebar"),
@@ -91,7 +96,6 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     return false;
   }
 
-  /** Run a shell command, log cmd/stdout/stderr, return result. */
   private async _exec(cmd: string) {
     this._log("command", `> ${cmd}`);
     const r = await run(cmd);
