@@ -136,7 +136,7 @@ export function getShellHtml(): string {
     border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.09));
     border-radius: 8px;
     padding: 10px 12px;
-    background: var(--vscode-sideBar-background);
+    background: rgba(255,255,255,0.04);
     transition: border-color 0.15s;
   }
   .device-card.ok    { border-color: rgba(78,201,78,0.22); }

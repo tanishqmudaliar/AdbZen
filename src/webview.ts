@@ -169,40 +169,67 @@ export function getAdbZenHtml(): string {
     border-color: rgba(229, 162, 32, 0.28);
   }
 
-  /* ── Device cards ── */
+  /* ── Device list ── */
   .device-list { display: flex; flex-direction: column; gap: 8px; }
-  .device-card {
-    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-    border-radius: 8px;
-    padding: 10px;
-    background: rgba(255,255,255,0.03);
-  }
-  .device-card.ok   { border-color: rgba(78, 201, 78, 0.22); }
-  .device-card.warn { border-color: rgba(229, 162, 32, 0.22); }
-  .device-card.error{ border-color: rgba(244, 71, 71, 0.22); }
 
-  .device-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
+  .device-card {
+    border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.09));
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    transition: border-color 0.15s;
   }
-  .device-badges { display: flex; gap: 5px; flex-shrink: 0; }
-  .device-body { display: grid; gap: 3px; }
+  .device-card.ok    { border-color: rgba(78,201,78,0.22); }
+  .device-card.warn  { border-color: rgba(229,162,32,0.22); }
+  .device-card.error { border-color: rgba(244,71,71,0.22); }
+  .device-card.muted { opacity: 0.6; }
+
+  .device-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .device-info { min-width: 0; flex: 1; }
   .device-serial {
     font-size: 12px;
     font-weight: 700;
     word-break: break-all;
+    line-height: 1.3;
   }
-  .device-subtitle {
+  .device-model {
     font-size: 11px;
-    opacity: 0.75;
-    margin-top: 1px;
+    opacity: 0.65;
+    margin-top: 2px;
   }
-  .detail-label { opacity: 0.48; }
-  .detail-value { font-weight: 600; }
+  .device-badges {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 
+  /* ── Meta line ── */
+  .device-meta {
+    font-size: 10.5px;
+    opacity: 0.6;
+    line-height: 1.55;
+    margin-bottom: 0;
+  }
+  .device-meta span + span::before { content: " · "; }
+
+  /* ── Unauth notice ── */
+  .unauth-note {
+    font-size: 10px;
+    color: #e5a220;
+    opacity: 0.85;
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+
+  /* ── Pills ── */
   .pill {
     padding: 2px 7px;
     border-radius: 999px;
@@ -213,40 +240,12 @@ export function getAdbZenHtml(): string {
     border: 1px solid transparent;
     white-space: nowrap;
   }
-  .pill.ok {
-    color: #4ec94e;
-    background: rgba(78, 201, 78, 0.12);
-    border-color: rgba(78, 201, 78, 0.24);
-  }
-  .pill.warn {
-    color: #e5a220;
-    background: rgba(229, 162, 32, 0.12);
-    border-color: rgba(229, 162, 32, 0.24);
-  }
-  .pill.error {
-    color: #f47878;
-    background: rgba(244, 71, 71, 0.12);
-    border-color: rgba(244, 71, 71, 0.24);
-  }
-  .pill.amber {
-    color: #e5a220;
-    background: rgba(229, 162, 32, 0.12);
-    border-color: rgba(229, 162, 32, 0.24);
-  }
-  .pill.neutral {
-    color: var(--vscode-foreground);
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(255,255,255,0.14);
-  }
-
-  .device-meta {
-    margin-top: 6px;
-    display: grid;
-    gap: 3px;
-    font-size: 11px;
-    line-height: 1.4;
-    opacity: 0.8;
-  }
+  .pill.ok      { color: #4ec94e; background: rgba(78,201,78,0.12);   border-color: rgba(78,201,78,0.26); }
+  .pill.warn    { color: #e5a220; background: rgba(229,162,32,0.12);  border-color: rgba(229,162,32,0.26); }
+  .pill.error   { color: #f47878; background: rgba(244,71,71,0.12);   border-color: rgba(244,71,71,0.26); }
+  .pill.amber   { color: #e5a220; background: rgba(229,162,32,0.12);  border-color: rgba(229,162,32,0.26); }
+  .pill.neutral { color: var(--vscode-foreground); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+  .pill.blue    { color: #6cb6ff; background: rgba(108,182,255,0.10); border-color: rgba(108,182,255,0.24); }
 
   .empty-state {
     padding: 12px;
@@ -408,6 +407,25 @@ export function getAdbZenHtml(): string {
 
   function countBy(devices, pred) { return devices.filter(pred).length; }
 
+  // ── Shared metadata maps (same as shell panel) ───────────────────────────
+
+  const CONN_META = {
+    usb:      { label: 'USB',      pillClass: 'ok'      },
+    wireless: { label: 'Wireless', pillClass: 'amber'   },
+    emulator: { label: 'Emulator', pillClass: 'blue'    },
+    unknown:  { label: 'Unknown',  pillClass: 'neutral' },
+  };
+
+  const STATE_META = {
+    device:       { label: 'Connected',    pillClass: 'ok',      tone: 'ok'    },
+    unauthorized: { label: 'Unauthorized', pillClass: 'warn',    tone: 'warn'  },
+    offline:      { label: 'Offline',      pillClass: 'error',   tone: 'error' },
+    recovery:     { label: 'Recovery',     pillClass: 'amber',   tone: 'warn'  },
+    bootloader:   { label: 'Bootloader',   pillClass: 'amber',   tone: 'warn'  },
+    sideload:     { label: 'Sideload',     pillClass: 'neutral', tone: 'ok'    },
+    unknown:      { label: 'Unknown',      pillClass: 'neutral', tone: 'muted' },
+  };
+
   function renderDevices(devices) {
     if (!devices.length) {
       $('deviceList').innerHTML = '<div class="empty-state">No adb devices detected yet. Connect a phone via USB with USB debugging enabled, or use wireless pairing.</div>';
@@ -415,35 +433,40 @@ export function getAdbZenHtml(): string {
     }
 
     $('deviceList').innerHTML = devices.map((d) => {
-      const stateTone = d.state === 'device' ? 'ok' : d.state === 'unauthorized' ? 'warn' : 'error';
-      const stateLabel = d.state === 'device' ? 'Connected' : d.state === 'unauthorized' ? 'Unauthorized' : d.state === 'offline' ? 'Offline' : d.state;
-      const connTone  = d.connectionType === 'usb' ? 'ok' : d.connectionType === 'wireless' ? 'amber' : 'neutral';
-      const connLabel = d.connectionType === 'usb' ? 'USB' : d.connectionType === 'wireless' ? 'Wireless' : d.connectionType === 'emulator' ? 'Emulator' : 'Unknown';
+      const sm   = STATE_META[d.state]         || STATE_META.unknown;
+      const cm   = CONN_META[d.connectionType] || CONN_META.unknown;
+      const tone = sm.tone;
 
-      const subtitles = [
-        d.model   ? '<div class="device-subtitle"><span class="detail-label">Model: </span>' + escapeHtml(d.model) + '</div>' : '',
-        d.product ? '<div class="device-subtitle"><span class="detail-label">Product: </span>' + escapeHtml(d.product) + '</div>' : '',
-      ].join('');
+      const metaParts = [
+        d.product ? 'Product: ' + escapeHtml(d.product) : '',
+        d.device  ? 'Codename: ' + escapeHtml(d.device)  : '',
+        d.usb     ? 'USB: '     + escapeHtml(d.usb)      : '',
+      ].filter(Boolean);
 
-      const metas = [
-        d.device   ? '<div><span class="detail-label">Codename: </span>' + escapeHtml(d.device) + '</div>' : '',
-        d.usb      ? '<div><span class="detail-label">USB ID: </span>' + escapeHtml(d.usb) + '</div>' : '',
-        d.features ? '<div><span class="detail-label">Features: </span>' + escapeHtml(d.features) + '</div>' : '',
-      ].filter(Boolean).join('');
+      const metaHtml = metaParts.length
+        ? '<div class="device-meta">' + metaParts.map(p => '<span>' + p + '</span>').join('') + '</div>'
+        : '';
 
-      return '<div class="device-card ' + stateTone + '">' +
-        '<div class="device-head">' +
-          '<div class="device-body">' +
-            '<div class="device-serial">' + escapeHtml(d.serial) + '</div>' +
-            subtitles +
+      const unauthNote = d.state === 'unauthorized'
+        ? '<div class="unauth-note">⚠ Check your phone and tap "Allow" on the USB debugging prompt.</div>'
+        : '';
+
+      return (
+        '<div class="device-card ' + tone + '">' +
+          '<div class="device-top">' +
+            '<div class="device-info">' +
+              '<div class="device-serial">' + escapeHtml(d.serial) + '</div>' +
+              (d.model ? '<div class="device-model">' + escapeHtml(d.model) + '</div>' : '') +
+            '</div>' +
+            '<div class="device-badges">' +
+              '<span class="pill ' + sm.pillClass + '">' + escapeHtml(sm.label) + '</span>' +
+              '<span class="pill ' + cm.pillClass + '">' + escapeHtml(cm.label) + '</span>' +
+            '</div>' +
           '</div>' +
-          '<div class="device-badges">' +
-            '<span class="pill ' + stateTone + '">' + escapeHtml(stateLabel) + '</span>' +
-            '<span class="pill ' + connTone  + '">' + escapeHtml(connLabel)  + '</span>' +
-          '</div>' +
-        '</div>' +
-        (metas ? '<div class="device-meta">' + metas + '</div>' : '') +
-      '</div>';
+          metaHtml +
+          unauthNote +
+        '</div>'
+      );
     }).join('');
   }
 
@@ -518,20 +541,20 @@ export function getAdbZenHtml(): string {
       text.textContent = 'Server Stopped';
     }
 
-    const connected   = countBy(devices, (d) => d.state === 'device');
-    const usb         = countBy(devices, (d) => d.connectionType === 'usb');
-    const wireless    = countBy(devices, (d) => d.connectionType === 'wireless');
-    const unauthorized= countBy(devices, (d) => d.state === 'unauthorized');
+    const connected    = countBy(devices, (d) => d.state === 'device');
+    const usb          = countBy(devices, (d) => d.connectionType === 'usb');
+    const wireless     = countBy(devices, (d) => d.connectionType === 'wireless');
+    const unauthorized = countBy(devices, (d) => d.state === 'unauthorized');
 
-    $('metaVersion').textContent = s.version ?? '—';
-    $('metaServer').textContent  = s.serverRunning ? 'Online' : 'Offline';
-    $('metaServer').className    = 'meta-value ' + (s.serverRunning ? 'ok' : 'error');
-    $('metaConnected').textContent  = String(connected);
-    $('metaConnected').className    = 'meta-value ' + (connected > 0 ? 'ok' : '');
-    $('metaUsb').textContent        = String(usb);
-    $('metaUsb').className          = 'meta-value ' + (usb > 0 ? 'ok' : '');
-    $('metaWireless').textContent   = String(wireless);
-    $('metaWireless').className     = 'meta-value ' + (wireless > 0 ? 'warn' : '');
+    $('metaVersion').textContent     = s.version ?? '—';
+    $('metaServer').textContent      = s.serverRunning ? 'Online' : 'Offline';
+    $('metaServer').className        = 'meta-value ' + (s.serverRunning ? 'ok' : 'error');
+    $('metaConnected').textContent   = String(connected);
+    $('metaConnected').className     = 'meta-value ' + (connected > 0 ? 'ok' : '');
+    $('metaUsb').textContent         = String(usb);
+    $('metaUsb').className           = 'meta-value ' + (usb > 0 ? 'ok' : '');
+    $('metaWireless').textContent    = String(wireless);
+    $('metaWireless').className      = 'meta-value ' + (wireless > 0 ? 'warn' : '');
     $('metaUnauthorized').textContent = String(unauthorized);
     $('metaUnauthorized').className   = 'meta-value ' + (unauthorized > 0 ? 'warn' : '');
 
