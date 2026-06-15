@@ -1,9 +1,10 @@
 {
   "name": "adbzen",
   "displayName": "AdbZen",
-  "description": "ADB manager for VS Code",
+  "description": "Manage ADB connections, pair Android devices wirelessly, and track device states directly from the VS Code sidebar.",
   "version": "0.0.1",
   "publisher": "",
+  "icon": "media/logo.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/tanishqmudaliar/AdbZen.git"

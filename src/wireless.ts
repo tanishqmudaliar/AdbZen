@@ -1,7 +1,7 @@
 import * as net from "net";
 import * as vscode from "vscode";
 import { run, scanAdbPorts } from "./adb.js";
-import { notify } from "./extension.js";
+import { notify, notifyWithActions, withProgress } from "./extension.js";
 import Bonjour from "bonjour-service";
 import type { Service } from "bonjour-service";
 import * as QRCode from "qrcode";
@@ -255,30 +255,33 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     this._post("status", { mode: "pairing" });
-    const r = await this._exec(`adb pair ${ip}:${port} ${code}`);
-    const ok = (r.stdout + r.stderr)
-      .toLowerCase()
-      .includes("successfully paired");
-    if (ok) {
-      notify(
-        "info",
-        "Device paired successfully — now connect via the Connect tab",
-      );
-    } else {
-      notify("error", `Code pairing failed: ${r.stderr || r.stdout}`);
-    }
-    this._post(
-      "status",
-      ok
-        ? { mode: "pair-success" }
-        : {
-            mode: "error",
-            message:
-              r.stderr ||
-              r.stdout ||
-              "Pairing failed — double-check IP, port, and code",
+
+    await withProgress("Pairing device…", async (progress) => {
+      progress.report({ message: `adb pair ${ip}:${port}` });
+      const r = await this._exec(`adb pair ${ip}:${port} ${code}`);
+      const ok = (r.stdout + r.stderr)
+        .toLowerCase()
+        .includes("successfully paired");
+
+      if (ok) {
+        notify("info", "Device paired — connect via the Connect tab");
+        this._post("status", { mode: "pair-success" });
+      } else {
+        const msg =
+          r.stderr ||
+          r.stdout ||
+          "Pairing failed — double-check IP, port, and code";
+        this._post("status", { mode: "error", message: msg });
+        await notifyWithActions(
+          "error",
+          `Code pairing failed: ${r.stderr || r.stdout || "unknown error"}`,
+          {
+            label: "Retry",
+            action: () => this._pairWithCode(ip, port, code),
           },
-    );
+        );
+      }
+    });
   }
 
   // ── Connect / disconnect ──────────────────────────────────────────────────
@@ -291,19 +294,32 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       });
       return;
     }
-    const r = await this._exec(`adb connect ${ip}:${port}`);
-    const ok = r.stdout.toLowerCase().includes("connected");
-    if (ok) {
-      notify("info", `Connected to ${ip}:${port}`);
-    } else {
-      notify("error", `Connect failed: ${r.stdout || r.stderr}`);
-    }
-    this._post(
-      "status",
-      ok
-        ? { mode: "connected", ip, port }
-        : { mode: "error", message: r.stdout || r.stderr },
-    );
+
+    await withProgress(`Connecting to ${ip}:${port}…`, async (progress) => {
+      progress.report({ message: `adb connect ${ip}:${port}` });
+      const r = await this._exec(`adb connect ${ip}:${port}`);
+      const ok = r.stdout.toLowerCase().includes("connected");
+
+      if (ok) {
+        notify("info", `Connected to ${ip}:${port}`);
+        this._post("status", { mode: "connected", ip, port });
+      } else {
+        const msg = r.stdout || r.stderr || "Connection failed";
+        this._post("status", { mode: "error", message: msg });
+        await notifyWithActions(
+          "error",
+          `Connect failed: ${msg}`,
+          {
+            label: "Retry",
+            action: () => this._adbConnect(ip, port),
+          },
+          {
+            label: "Scan Ports",
+            action: () => this._post("scan", { status: "scanning" }),
+          },
+        );
+      }
+    });
   }
 
   private async _adbDisconnect(ip: string, port: string, serial?: string) {
