@@ -9,8 +9,6 @@
 
 ---
 
-#### Video Demo: <URL_HERE>
-
 #### Description:
 
 AdbZen is a comprehensive, feature-rich Android Debug Bridge (ADB) manager built as an extension for Visual Studio Code. It is meticulously designed to streamline the workflow of Android developers, React Native engineers, Flutter developers, and embedded systems programmers who frequently interact with physical Android devices or emulators.
