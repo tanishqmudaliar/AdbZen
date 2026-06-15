@@ -1,6 +1,7 @@
 import * as net from "net";
 import * as vscode from "vscode";
 import { run, scanAdbPorts } from "./adb.js";
+import { notify } from "./extension.js";
 import Bonjour from "bonjour-service";
 import type { Service } from "bonjour-service";
 import * as QRCode from "qrcode";
@@ -81,7 +82,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
           await this._adbConnect(msg.ip, msg.port);
           break;
         case "disconnect":
-          await this._adbDisconnect(msg.ip, msg.port);
+          await this._adbDisconnect(msg.ip, msg.port, msg.serial);
           break;
         case "clearLog":
           this._logLines = [];
@@ -167,6 +168,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       "output",
       "QR ready. On phone: Wireless Debugging → Pair device with QR code → scan this code",
     );
+    notify("info", "QR code ready — scan with your phone");
 
     this._mdns = new MdnsScanner();
     this._mdns.scan(
@@ -178,12 +180,17 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
           .toLowerCase()
           .includes("successfully paired");
         if (!ok) {
+          notify(
+            "error",
+            `QR pairing failed: ${r.stderr || r.stdout || "unknown error"}`,
+          );
           this._post("status", {
             mode: "error",
             message: r.stderr || r.stdout || "Pairing failed",
           });
           return;
         }
+        notify("info", "QR pairing successful — connecting…");
         this._post("status", { mode: "connecting" });
         this._log("output", "Paired! Scanning for debug port advertisement…");
         this._autoConnect(ip);
@@ -207,6 +214,11 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
         const target = ip || pairedIp;
         const r = await this._exec(`adb connect ${target}:${port}`);
         const ok = r.stdout.toLowerCase().includes("connected");
+        if (ok) {
+          notify("info", `Wireless device connected: ${target}:${port}`);
+        } else {
+          notify("error", `Auto-connect failed: ${r.stdout || r.stderr}`);
+        }
         this._post(
           "status",
           ok
@@ -215,6 +227,10 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
         );
       },
       () => {
+        notify(
+          "warn",
+          "Paired but auto-connect timed out — connect manually via Connect tab",
+        );
         this._post("status", {
           mode: "paired-no-connect",
           message:
@@ -243,6 +259,14 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     const ok = (r.stdout + r.stderr)
       .toLowerCase()
       .includes("successfully paired");
+    if (ok) {
+      notify(
+        "info",
+        "Device paired successfully — now connect via the Connect tab",
+      );
+    } else {
+      notify("error", `Code pairing failed: ${r.stderr || r.stdout}`);
+    }
     this._post(
       "status",
       ok
@@ -269,6 +293,11 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     }
     const r = await this._exec(`adb connect ${ip}:${port}`);
     const ok = r.stdout.toLowerCase().includes("connected");
+    if (ok) {
+      notify("info", `Connected to ${ip}:${port}`);
+    } else {
+      notify("error", `Connect failed: ${r.stdout || r.stderr}`);
+    }
     this._post(
       "status",
       ok
@@ -277,10 +306,33 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
     );
   }
 
-  private async _adbDisconnect(ip: string, port: string) {
-    const target = ip && port ? `${ip}:${port}` : "";
-    const cmd = target ? `adb disconnect ${target}` : "adb disconnect";
-    await this._exec(cmd);
+  private async _adbDisconnect(ip: string, port: string, serial?: string) {
+    // If we have an explicit serial (mDNS, USB, etc.) use that directly
+    if (serial) {
+      const r = await this._exec(`adb -s ${serial} disconnect`);
+      const ok = !r.stderr.toLowerCase().includes("error");
+      notify(
+        ok ? "info" : "warn",
+        ok
+          ? `Disconnected: ${serial}`
+          : `Disconnect may have failed for ${serial}`,
+      );
+      this._post("status", { mode: "idle" });
+      return;
+    }
+    // ip:port style wireless
+    if (ip && port) {
+      await this._exec(`adb disconnect ${ip}:${port}`);
+      notify("info", `Disconnected from ${ip}:${port}`);
+      this._post("status", { mode: "idle" });
+      return;
+    }
+    // disconnect all wireless (TCP only — does not affect USB)
+    await this._exec("adb disconnect");
+    notify(
+      "info",
+      "Disconnected all wireless (TCP/IP) devices — USB devices are unaffected",
+    );
     this._post("status", { mode: "idle" });
   }
 
@@ -916,7 +968,7 @@ export function getWirelessHtml(): string {
       <div>
         <div style="font-size:10px;opacity:0.45;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Target Device</div>
         <div class="cf-target">
-          <input class="cf-target-input" id="connectIp" type="text" placeholder="192.168.x.x" autocomplete="off" spellcheck="false" />
+          <input class="cf-target-input" id="connectIp" type="text" placeholder="192.168.x.x or mDNS serial" autocomplete="off" spellcheck="false" />
           <span class="cf-sep">:</span>
           <input class="cf-port-input" id="connectPort" type="number" placeholder="port" />
         </div>
@@ -941,6 +993,9 @@ export function getWirelessHtml(): string {
 
       <div class="cf-secondary">
         <div class="shell-hint">⌨ To open a shell, use the <strong>Shell</strong> panel — it shows all connected devices (USB, wireless &amp; emulators).</div>
+        <div class="shell-hint" style="color:#e5a220;background:rgba(229,162,32,0.06);border-color:rgba(229,162,32,0.18);">
+          ⚠ USB devices cannot be disconnected via ADB — physically unplug them. "Disconnect All Wireless" only affects TCP/IP wireless connections.
+        </div>
         <button class="btn btn-danger"  id="btnDisconnect">Disconnect This Device</button>
         <button class="btn btn-neutral" id="btnDisconnectAll">Disconnect All Wireless</button>
       </div>
@@ -1049,24 +1104,30 @@ export function getWirelessHtml(): string {
   // ── Disconnect confirmation modal ────────────────────────────────────────
   let pendingDisconnect = null;
 
-  function showDisconnectModal(ip, port) {
-    pendingDisconnect = { ip, port };
-    const body = ip && port
-      ? 'Disconnect <code>' + escapeHtml(ip + ':' + port) + '</code> from ADB?'
-      : 'Disconnect <strong>all</strong> wireless ADB devices?';
+  function showDisconnectModal(ip, port, serial) {
+    pendingDisconnect = { ip, port, serial };
+    const target = serial || (ip && port ? ip + ':' + port : null);
+    const body = target
+      ? 'Disconnect <code>' + escapeHtml(target) + '</code> from ADB?'
+      : 'Disconnect <strong>all</strong> wireless (TCP/IP) ADB devices?';
     $('modal-body-text').innerHTML = body;
     $('disconnect-modal').classList.remove('hidden');
   }
 
-  $('cancelDisconnect').addEventListener('click', () => {
-    $('disconnect-modal').classList.add('hidden');
-    pendingDisconnect = null;
-  });
-
   $('confirmDisconnect').addEventListener('click', () => {
     if (!pendingDisconnect) { return; }
     $('disconnect-modal').classList.add('hidden');
-    vscode.postMessage({ command: 'disconnect', ip: pendingDisconnect.ip, port: pendingDisconnect.port });
+    vscode.postMessage({
+      command: 'disconnect',
+      ip:     pendingDisconnect.ip,
+      port:   pendingDisconnect.port,
+      serial: pendingDisconnect.serial,
+    });
+    pendingDisconnect = null;
+  });
+
+  $('cancelDisconnect').addEventListener('click', () => {
+    $('disconnect-modal').classList.add('hidden');
     pendingDisconnect = null;
   });
 
@@ -1222,17 +1283,30 @@ export function getWirelessHtml(): string {
   });
 
   $('btnDisconnect').addEventListener('click', () => {
-    const ip   = $('connectIp').value.trim();
-    const port = $('connectPort').value.trim();
-    if (!ip || !port) {
-      setStatus('connect', makeBanner('error', '✕', 'Enter an IP and port to disconnect a specific device, or use "Disconnect All Wireless"'));
+    const ip     = $('connectIp').value.trim();
+    const port   = $('connectPort').value.trim();
+    const serial = $('connectIp').value.trim(); // may be an mDNS serial or plain IP
+
+    if (!ip) {
+      setStatus('connect', makeBanner('error', '✕', 'Enter an IP, port, or serial to disconnect a specific device'));
       return;
     }
-    showDisconnectModal(ip, port);
+
+    // Detect if input looks like a bare serial (not ip:port) — mDNS, USB serial, etc.
+    const looksLikeSerial = !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip);
+
+    if (looksLikeSerial) {
+      // treat the IP field as a raw serial
+      showDisconnectModal(ip, '', serial);
+    } else if (ip && port) {
+      showDisconnectModal(ip, port, '');
+    } else {
+      setStatus('connect', makeBanner('error', '✕', 'Enter port too, or paste the full serial into the IP field'));
+    }
   });
 
   $('btnDisconnectAll').addEventListener('click', () => {
-    showDisconnectModal('', '');
+    showDisconnectModal('', '', '');
   });
 
   $('clearLogBtn').addEventListener('click', () => {

@@ -1,8 +1,13 @@
 {
   "name": "adbzen",
   "displayName": "AdbZen",
-  "description": "Wireless ADB manager for VS Code",
+  "description": "ADB manager for VS Code",
   "version": "0.0.1",
+  "publisher": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tanishqmudaliar/AdbZen.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -41,13 +46,7 @@
           "icon": "media/icon.svg"
         }
       ]
-    },
-    "commands": [
-      {
-        "command": "adbzen.openPanel",
-        "title": "AdbZen: Open Panel"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
