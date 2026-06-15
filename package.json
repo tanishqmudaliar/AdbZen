@@ -22,7 +22,7 @@
         {
           "id": "adbzen-sidebar",
           "title": "AdbZen",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -32,19 +32,19 @@
           "type": "webview",
           "id": "adbzen.mainView",
           "name": "AdbZen",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         },
         {
           "type": "webview",
           "id": "adbzen.wirelessView",
           "name": "Wireless Pairing",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         },
         {
           "type": "webview",
           "id": "adbzen.shellView",
           "name": "Shell",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     }
