@@ -55,7 +55,7 @@ AdbZen is packed with utility features designed to save seconds on every interac
 - **Wireless QR Code Pairing:** Android 11+ supports wireless debugging. AdbZen generates a secure QR code right in your editor. Scan it with your phone, and AdbZen handles the mDNS negotiation and pairs the device automatically.
 - **Wireless Code Pairing:** Fallback support for pairing via the 6-digit code method provided by Android Developer Options.
 - **Auto-Connect:** Once paired wirelessly, AdbZen actively scans the network for the device's secondary debug port broadcast and connects automatically.
-- **Automated ADB Installation:** If ADB is missing from your system, AdbZen detects your OS and package manager (Homebrew, apt, winget, choco, pacman, etc.) and offers a one-click installation button.
+- **Automated ADB Installation:** If ADB is missing from your system, AdbZen detects your OS and package manager (Homebrew, apt, winget, Chocolatey, Scoop, pacman, etc.) and offers a one-click installation button. On Windows, PATH updates are written to the **User** environment variables (no admin/UAC prompt required) and are immediately visible in your Environment Variables dialog under "User variables".
 - **Integrated Device Shells:** Instantly open a native VS Code terminal tab bound to a specific device's shell (`adb -s <serial> shell`). Perfect for multi-device testing.
 - **Custom Theming Engine:** All UI components use VS Code's internal CSS variables, meaning AdbZen looks flawless whether you use Monokai, Dracula, or the default Light theme.
 
@@ -282,7 +282,7 @@ If Wireless Pairing fails, it is almost always a local network issue.
 ## Troubleshooting & FAQ
 
 **Q: AdbZen says "ADB Not Installed" but I know I have it!**
-A: This means ADB is not in your system's global `PATH` environment variable. AdbZen attempts to look in common default directories, but if you installed it in a custom location, you must add that folder to your OS PATH. Alternatively, check the AdbZen UI—it might have found it and will show you the exact path it discovered. Restart VS Code after updating your PATH.
+A: This means ADB is not in your system's global `PATH` environment variable. AdbZen attempts to look in common default directories — including WinGet's package folder on Windows — and if it finds ADB there, it will offer an "Add to PATH" button. This writes to your **User PATH** (not System PATH), so look under "User variables" in the Environment Variables dialog, not "System variables". Restart VS Code after updating your PATH for it to take effect everywhere.
 
 **Q: The QR Code pairing is timing out.**
 A: Ensure your phone is awake and the camera is actively scanning the code. The mDNS broadcast only happens while the phone's QR scanning screen is active. If it still fails, your network might be blocking mDNS packets.

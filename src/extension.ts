@@ -1,6 +1,10 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import * as vscode from "vscode";
 import {
   getAdbStatus,
+  getPlatformInfo,
   isAdbServerListening,
   run,
   getInstallCommand,
@@ -221,8 +225,14 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Background poller — drives status bar + device diff notifications
-  const poller = setInterval(async () => {
+  const pollOnce = async () => {
     const status = await getAdbStatus();
+
+    void vscode.commands.executeCommand(
+      "setContext",
+      "adbzen.adbReady",
+      status.installed,
+    );
 
     const deviceCount = status.devices.filter(
       (d) => d.state === "device",
@@ -245,15 +255,16 @@ export function activate(context: vscode.ExtensionContext) {
       unauthorizedCount,
     );
 
-    // device diff
     const next = status.devices.map((d) => ({
       serial: d.serial,
       state: d.state,
     }));
     diffDevices(_prevDevices, next);
     _prevDevices = next;
-  }, 3000);
+  };
 
+  void pollOnce();
+  const poller = setInterval(pollOnce, 3000);
   context.subscriptions.push({ dispose: () => clearInterval(poller) });
 }
 
@@ -298,6 +309,9 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
               "https://developer.android.com/tools/releases/platform-tools",
             ),
           );
+          break;
+        case "addToPath":
+          await this._addAdbToPath();
           break;
       }
     });
@@ -493,6 +507,106 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     term.sendText(cmd);
     term.show();
     notify("info", `Installing ADB via ${packageManager} — check the terminal`);
+  }
+
+  private async _addAdbToPath() {
+    const info = await getPlatformInfo();
+    const adbPath = info.adbFoundAt;
+    if (!adbPath) {
+      notify("warn", "Could not determine where ADB is installed.");
+      return;
+    }
+    const dir = path.dirname(adbPath);
+
+    if (process.platform === "win32") {
+      await this._addToPathWindows(dir);
+    } else {
+      await this._addToPathUnix(dir);
+    }
+
+    await this._sendStatus();
+  }
+
+  private async _addToPathWindows(dir: string) {
+    const scriptPath = path.join(
+      os.tmpdir(),
+      `adbzen-add-path-${Date.now()}.ps1`,
+    );
+    const script = [
+      `$dir = "${dir.replace(/"/g, '""')}"`,
+      `$cur = [Environment]::GetEnvironmentVariable("Path", "User")`,
+      `if ($cur -notlike "*$dir*") {`,
+      `  [Environment]::SetEnvironmentVariable("Path", "$cur;$dir", "User")`,
+      `}`,
+    ].join("\n");
+
+    try {
+      fs.writeFileSync(scriptPath, script, "utf8");
+    } catch (err) {
+      notify("error", `Failed to prepare PATH update script: ${String(err)}`);
+      return;
+    }
+
+    this._log("command", `> Adding "${dir}" to the user PATH`);
+
+    const r = await run(
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+    );
+
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch {
+      /* ignore */
+    }
+
+    if (r.code === 0) {
+      await this._refreshProcessPathWindows();
+      this._log("output", "User PATH updated.");
+      const status = await getAdbStatus();
+      if (status.installed) {
+        notify("info", "ADB added to PATH and detected — you're all set.");
+      } else {
+        notify(
+          "warn",
+          "PATH updated, but ADB still wasn't detected. Fully quit and reopen VS Code (not just Reload Window) to pick it up everywhere.",
+        );
+      }
+    } else {
+      this._log("error", r.stderr || "PATH update failed.");
+      notify(
+        "warn",
+        "Couldn't update PATH automatically — the script may have been blocked.",
+      );
+    }
+  }
+
+  private async _refreshProcessPathWindows() {
+    const r = await run(
+      `powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`,
+    );
+    const combined = r.stdout.trim();
+    if (combined) {
+      process.env.PATH = combined;
+    }
+  }
+
+  private async _addToPathUnix(dir: string) {
+    const home = process.env.HOME ?? "";
+    const profile = path.join(
+      home,
+      process.platform === "darwin" ? ".zprofile" : ".bashrc",
+    );
+    const exportLine = `\nexport PATH="$PATH:${dir}"\n`;
+    try {
+      fs.appendFileSync(profile, exportLine);
+      this._log("output", `Appended PATH export to ${profile}`);
+      notify(
+        "info",
+        `Added "${dir}" to PATH in ${profile} — restart your terminal/VS Code for it to take effect.`,
+      );
+    } catch (err) {
+      notify("error", `Failed to update ${profile}: ${String(err)}`);
+    }
   }
 }
 

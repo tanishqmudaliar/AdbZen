@@ -1,8 +1,8 @@
 {
   "name": "adbzen",
   "displayName": "AdbZen",
-  "description": "Manage ADB connections, pair Android devices wirelessly, and track device states directly from the VS Code sidebar.",
-  "version": "0.0.1",
+  "description": "A streamlined GUI for ADB that lets you manage connections, pair devices wirelessly, and access shell commands directly from VS Code.",
+  "version": "0.0.2",
   "publisher": "tanishqmudaliar",
   "icon": "media/icon.png",
   "repository": {
@@ -38,13 +38,15 @@
           "type": "webview",
           "id": "adbzen.wirelessView",
           "name": "Wireless Pairing",
-          "icon": "media/icon.png"
+          "icon": "media/icon.png",
+          "when": "adbzen.adbReady"
         },
         {
           "type": "webview",
           "id": "adbzen.shellView",
           "name": "Shell",
-          "icon": "media/icon.png"
+          "icon": "media/icon.png",
+          "when": "adbzen.adbReady"
         }
       ]
     }

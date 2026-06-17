@@ -80,7 +80,7 @@ function parseKeyValues(tokens: string[]): Record<string, string | null> {
     if (sep <= 0) {
       continue;
     }
-    const key = token.slice(0, sep).trim();
+    const key = token.slice(0, sep);
     if (key) {
       result[key] = token.slice(sep + 1).trim() || null;
     }
@@ -89,22 +89,14 @@ function parseKeyValues(tokens: string[]): Record<string, string | null> {
 }
 
 function detectConnectionType(serial: string): AdbConnectionType {
-  const normalized = serial.toLowerCase();
-
-  if (serial.startsWith("emulator-")) {
-    return "emulator";
-  }
-
-  const looksLikeWireless =
+  if (serial.startsWith("emulator-")) return "emulator";
+  if (
     /^(?:\d{1,3}\.){3}\d{1,3}:\d+$/.test(serial) ||
     /^.+:\d+$/.test(serial) ||
-    normalized.includes("adb-tls") ||
-    normalized.endsWith(".local");
-
-  if (looksLikeWireless) {
+    serial.toLowerCase().includes("adb-tls") ||
+    serial.toLowerCase().endsWith(".local")
+  )
     return "wireless";
-  }
-
   return "usb";
 }
 
@@ -134,12 +126,7 @@ export function parseAdbDevices(output: string): AdbDevice[] {
 export async function isAdbServerListening(): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const socket = new net.Socket();
-    let done = false;
     const finish = (v: boolean) => {
-      if (done) {
-        return;
-      }
-      done = true;
       socket.destroy();
       resolve(v);
     };
@@ -157,6 +144,21 @@ function getPlatformName(): "darwin" | "win32" | "linux" {
   return "linux";
 }
 
+function findWingetAdbPath(localAppData: string): string | null {
+  try {
+    const pkgRoot = path.join(localAppData, "Microsoft", "WinGet", "Packages");
+    if (!fs.existsSync(pkgRoot)) return null;
+    const match = fs
+      .readdirSync(pkgRoot)
+      .find((entry) => entry.startsWith("Google.PlatformTools_"));
+    if (!match) return null;
+    const adbPath = path.join(pkgRoot, match, "platform-tools", "adb.exe");
+    return fs.existsSync(adbPath) ? adbPath : null;
+  } catch {
+    return null;
+  }
+}
+
 async function findAdbInCommonPaths(): Promise<string | null> {
   const platform = getPlatformName();
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
@@ -171,6 +173,8 @@ async function findAdbInCommonPaths(): Promise<string | null> {
     );
   } else if (platform === "win32") {
     const localAppData = process.env.LOCALAPPDATA ?? "";
+    const wingetAdb = findWingetAdbPath(localAppData);
+    if (wingetAdb) candidates.push(wingetAdb);
     candidates.push(
       path.join(localAppData, "Android", "Sdk", "platform-tools", "adb.exe"),
       "C:\\Android\\platform-tools\\adb.exe",
@@ -241,7 +245,7 @@ export function getInstallCommand(packageManager: string): string {
   return commands[packageManager] ?? "";
 }
 
-async function getPlatformInfo(): Promise<AdbPlatformInfo> {
+export async function getPlatformInfo(): Promise<AdbPlatformInfo> {
   const platform = getPlatformName();
   const [packageManagers, adbFoundAt] = await Promise.all([
     detectPackageManagers(),
@@ -276,21 +280,28 @@ export async function getAdbStatus(): Promise<AdbStatus> {
   const version = match ? match[1] : (stdout.split("\n")[0] ?? "");
   const serverRunning = await isAdbServerListening();
   let devices: AdbDevice[] = [];
-  let deviceErrors = "";
   if (serverRunning) {
     const list = await run("adb devices -l");
     devices = parseAdbDevices(list.stdout);
-    deviceErrors = list.stderr;
+    const mismatch =
+      list.stderr.includes("out of date") ||
+      list.stderr.includes("doesn't match");
+    return {
+      installed: true,
+      version,
+      serverRunning,
+      devices,
+      error: mismatch ? "ADB server version mismatch detected" : null,
+      operation: null,
+      platformInfo: null,
+    };
   }
-  const mismatch =
-    deviceErrors.includes("out of date") ||
-    deviceErrors.includes("doesn't match");
   return {
     installed: true,
     version,
     serverRunning,
     devices,
-    error: mismatch ? "ADB server version mismatch detected" : null,
+    error: null,
     operation: null,
     platformInfo: null,
   };
@@ -322,12 +333,7 @@ export async function scanAdbPorts(
         (port) =>
           new Promise<number | null>((resolve) => {
             const s = new net.Socket();
-            let done = false;
             const finish = (ok: boolean) => {
-              if (done) {
-                return;
-              }
-              done = true;
               s.destroy();
               resolve(ok ? port : null);
             };

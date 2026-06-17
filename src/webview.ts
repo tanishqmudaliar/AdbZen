@@ -418,9 +418,17 @@ export function getAdbZenHtml(): string {
           <span class="btn-icon">⬇</span>
           <span id="btnInstallLabel">Install ADB</span>
         </button>
+        <button id="btnAddToPath" class="btn btn-primary hidden">
+          <span class="btn-icon">🛠</span>
+          Add ADB to PATH
+        </button>
         <button id="btnDownloadAdb" class="btn btn-neutral">
           <span class="btn-icon">🌐</span>
           Open Download Page
+        </button>
+        <button id="btnRecheckAdb" class="btn btn-neutral">
+          <span class="btn-icon">↻</span>
+          Check Again
         </button>
       </div>
 
@@ -577,13 +585,18 @@ export function getAdbZenHtml(): string {
   $('btnInstallAdb').addEventListener('click', () => {
     const pm = $('btnInstallAdb').dataset.packageManager;
     if (!pm) { return; }
-    _installingAdb = true;
-    $('btnInstallLabel').textContent = 'Installing… check the terminal';
-    $('btnInstallAdb').disabled = true;
     vscode.postMessage({ command: 'installAdb', packageManager: pm });
   });
   $('btnDownloadAdb').addEventListener('click', () => {
     vscode.postMessage({ command: 'openDownloadPage' });
+  });
+  $('btnAddToPath').addEventListener('click', () => {
+    vscode.postMessage({ command: 'addToPath' });
+  });
+  $('btnRecheckAdb').addEventListener('click', () => {
+    $('btnRecheckAdb').disabled = true;
+    vscode.postMessage({ command: 'refresh' });
+    setTimeout(() => { $('btnRecheckAdb').disabled = false; }, 1200);
   });
   $('clearLogBtn').addEventListener('click', () => { vscode.postMessage({ command: 'clearLog' }); });
   $('btnStart').addEventListener('click',   () => send('start',   false));
@@ -620,30 +633,28 @@ export function getAdbZenHtml(): string {
     if (!platformInfo) { return; }
     const { platform, packageManagers, pathIssue, adbFoundAt } = platformInfo;
 
-    // PATH issue banner
     if (pathIssue && adbFoundAt) {
       $('niPathBanner').classList.remove('hidden');
       $('niAdbPath').textContent = adbFoundAt;
+      $('btnAddToPath').classList.remove('hidden');
     } else {
       $('niPathBanner').classList.add('hidden');
+      $('btnAddToPath').classList.add('hidden');
     }
 
-    // Install button — only update when not mid-install
-    if (!_installingAdb) {
-      if (Array.isArray(packageManagers) && packageManagers.length > 0) {
-        const pm = packageManagers[0];
-        const pmLabels = {
-          brew: 'Homebrew', winget: 'winget', choco: 'Chocolatey',
-          scoop: 'Scoop', apt: 'apt', 'apt-get': 'apt-get',
-          dnf: 'dnf', pacman: 'pacman', zypper: 'zypper',
-        };
-        $('btnInstallLabel').textContent = 'Install via ' + (pmLabels[pm] || pm);
-        $('btnInstallAdb').dataset.packageManager = pm;
-        $('btnInstallAdb').disabled = false;
-        $('btnInstallAdb').classList.remove('hidden');
-      } else {
-        $('btnInstallAdb').classList.add('hidden');
-      }
+    if (Array.isArray(packageManagers) && packageManagers.length > 0) {
+      const pm = packageManagers[0];
+      const pmLabels = {
+        brew: 'Homebrew', winget: 'winget', choco: 'Chocolatey',
+        scoop: 'Scoop', apt: 'apt', 'apt-get': 'apt-get',
+        dnf: 'dnf', pacman: 'pacman', zypper: 'zypper',
+      };
+      $('btnInstallLabel').textContent = 'Install via ' + (pmLabels[pm] || pm);
+      $('btnInstallAdb').dataset.packageManager = pm;
+      $('btnInstallAdb').disabled = false;
+      $('btnInstallAdb').classList.remove('hidden');
+    } else {
+      $('btnInstallAdb').classList.add('hidden');
     }
 
     $('niManualSteps').innerHTML = getManualSteps(platform);
