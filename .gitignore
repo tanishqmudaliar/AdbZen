@@ -3,3 +3,5 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+/media/demo.mp4
+/media/thumbnail.png
