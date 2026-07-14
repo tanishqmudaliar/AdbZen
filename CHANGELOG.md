@@ -2,36 +2,46 @@
 
 All notable changes to the "adbzen" extension will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.2] - Bug Fixes & Code Quality
+## [Unreleased]
 
-### Fixed
-
-- **Add to PATH (Windows):** PATH entry is now written to **User** environment variables instead of System, making it immediately visible under "User variables" in the Environment Variables dialog. The UAC/admin elevation prompt has been removed — no administrator rights required.
-- **ADB status check:** Eliminated a redundant `deviceErrors` intermediate variable in `getAdbStatus`; mismatch detection now reads directly from `list.stderr`, and the early-return path when the server is not running avoids an unnecessary trailing return.
+## [1.0.0] - 2026-07-14
 
 ### Changed
 
-- **WinGet ADB path detection:** `findAdbInCommonPaths` on Windows now also scans the WinGet packages directory (`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Google.PlatformTools_*`) for `adb.exe`, improving detection for users who installed Platform Tools via `winget`.
+- **Stable Release:** Promoted version `0.0.2` to `1.0.0` to mark the first official, stable, and production-ready release of AdbZen.
 
-### Internal
-
-- Removed redundant `.trim()` call on already-whitespace-split token keys in `parseKeyValues`.
-- Inlined the unused `normalized` intermediate variable in `detectConnectionType`.
-- Removed the redundant `done` boolean guard from `isAdbServerListening` and `scanAdbPorts` socket callbacks; `socket.destroy()` is sufficient to suppress further events in both cases.
-
----
-
-## [0.0.1] - Initial Release
+## [0.0.2] - 2026-07-14
 
 ### Added
 
-- **Core ADB Management:** Start, stop, and restart the ADB server directly from the VS Code sidebar.
-- **Smart Status Bar:** Real-time tracking of the ADB server state, including device counts separated by USB, Wireless, and Unauthorized states.
-- **Wireless Pairing (mDNS):** Seamlessly pair Android devices over Wi-Fi using automated QR code generation or 6-digit pairing codes.
+- **WinGet ADB Detection:** Automatically scans the WinGet packages directory (`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Google.PlatformTools_*`) for `adb.exe`, significantly improving detection for users who installed Platform Tools via Windows Package Manager.
+
+### Changed
+
+- **Windows PATH Optimization:** The "Add to PATH" feature now writes directly to **User** environment variables instead of System variables. This removes the UAC/Administrator elevation prompt and makes the change immediately visible in user settings.
+
+### Fixed
+
+- **Status Check Efficiency:** Eliminated redundant intermediate variables in `getAdbStatus`. Mismatch detection now reads directly from `list.stderr` for faster parsing.
+- **Socket Resource Handling:** Removed redundant boolean guards from `isAdbServerListening` and `scanAdbPorts` callbacks. `socket.destroy()` is now used to suppress trailing events and release network resources.
+- **String Parsing:** Removed unnecessary `.trim()` calls on token keys in `parseKeyValues` that were already split by whitespace.
+
+## [0.0.1] - 2026-07-01
+
+### Added
+
+- **Core ADB Management:** Start, stop, and restart the ADB server directly from the VS Code sidebar GUI.
+- **Smart Status Bar:** Real-time tracking of ADB server state, including device counts separated by USB, Wireless, and Unauthorized states.
+- **Wireless Pairing (mDNS):** Seamlessly pair Android 11+ devices over Wi-Fi using automated QR code generation or standard 6-digit pairing codes.
 - **Interactive Shell View:** View all connected devices and launch a dedicated VS Code terminal for `adb shell` with a single click.
 - **Auto-Installation:** Automatic detection of missing ADB installations with 1-click install support via package managers (Homebrew, winget, Chocolatey, Scoop, apt, dnf, pacman, etc.).
-- **Smart Notifications:** Real-time VS Code notifications for device connections, disconnections, and authorization changes.
-- **Command Log Terminal:** Integrated terminal view within the sidebar to track all raw commands executed by AdbZen and their outputs.
+- **Smart Notifications:** Real-time VS Code native toast notifications for device connections, disconnections, and RSA authorization changes.
+- **Command Log Terminal:** Integrated terminal view in the sidebar to track all raw CLI commands executed by AdbZen and their outputs.
+
+[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.2...v1.0.0
+[0.0.2]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/tanishqmudaliar/AdbZen/releases/tag/v0.0.1

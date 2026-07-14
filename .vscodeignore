@@ -10,5 +10,5 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 node_modules/**
-/media/demo.mp4
-/media/thumbnail.png
+media/demo.mp4
+media/thumbnail.png

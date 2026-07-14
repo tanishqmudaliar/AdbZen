@@ -1,4 +1,6 @@
-# AdbZen: The Ultimate Android Debug Bridge Manager for VS Code
+# AdbZen
+
+ADB manager for VS Code — wireless pairing, device shells, server control, auto-install, and real-time device visibility from the sidebar.
 
 ![VS Code](https://img.shields.io/badge/VS_Code-^1.85.0-007ACC?logo=visual-studio-code&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3.0-3178C6?logo=typescript&logoColor=white)
@@ -7,356 +9,401 @@
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Status](https://img.shields.io/badge/Status-Active_Development-brightgreen)
 
----
-
-#### Video Demo: https://www.youtube.com/watch?v=BD9QanAADw0
-
-#### Description:
-
-AdbZen is a comprehensive, feature-rich Android Debug Bridge (ADB) manager built as an extension for Visual Studio Code. It is meticulously designed to streamline the workflow of Android developers, React Native engineers, Flutter developers, and embedded systems programmers who frequently interact with physical Android devices or emulators.
-
-Traditionally, managing ADB requires constantly switching contexts between the code editor and an external terminal window, memorizing tedious Command Line Interface (CLI) commands, and manually typing IP addresses and pairing codes to establish wireless debugging sessions. These friction points disrupt the development flow and cause unnecessary context switching.
-
-AdbZen solves these problems by deeply integrating ADB control directly into the VS Code interface via the Sidebar and Status Bar. It provides an intuitive, high-performance Graphical User Interface (GUI) to start, stop, and restart the ADB server, view connected devices in real-time, establish wireless connections via dynamic QR codes or mDNS broadcasting, and launch device-specific terminal shells with a single click. AdbZen acts as the bridge between your code and your test devices, completely removing the need to ever touch the raw ADB CLI again.
-
-This extension was constructed using TypeScript, Node.js, and the VS Code Extension API. It relies heavily on VS Code's Webview API to render modern, responsive HTML/CSS/JS interfaces that dynamically adapt to the user's active IDE theme.
+**[Video Demo](https://www.youtube.com/watch?v=BD9QanAADw0)**
 
 ---
 
 ## Table of Contents
 
-1. [Features Overview](#features-overview)
-2. [Prerequisites and Installation](#prerequisites-and-installation)
-3. [Comprehensive File & Directory Breakdown](#comprehensive-file--directory-breakdown)
-   - [package.json](#1-packagejson)
-   - [src/extension.ts](#2-srcextensionts)
-   - [src/adb.ts](#3-srcadbts)
-   - [src/webview.ts](#4-srcwebviewts)
-   - [src/wireless.ts](#5-srcwirelessts)
-   - [src/shell.ts](#6-srcshellts)
-4. [In-Depth Design Choices](#in-depth-design-choices)
-5. [User Interface Guide](#user-interface-guide)
-6. [Under the Hood: Architecture](#under-the-hood-architecture)
-7. [Advanced Usage](#advanced-usage)
-8. [Troubleshooting & FAQ](#troubleshooting--faq)
-9. [Development & Building from Source](#development--building-from-source)
-10. [Roadmap & Future Enhancements](#roadmap--future-enhancements)
-11. [Author & Acknowledgements](#author--acknowledgements)
+- [Overview](#overview)
+- [Features](#features)
+  - [Core ADB Control](#core-adb-control)
+  - [Wireless Pairing & Connectivity](#wireless-pairing--connectivity)
+  - [Device Productivity & UX](#device-productivity--ux)
+  - [Developer Experience](#developer-experience)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Project Structure](#project-structure)
+- [Architecture](#architecture)
+- [Usage Guide](#usage-guide)
+  - [Main View (AdbZen)](#main-view-adbzen)
+  - [Wireless Pairing View](#wireless-pairing-view)
+  - [Shell View](#shell-view)
+  - [Advanced Usage](#advanced-usage)
+- [Comprehensive File & Directory Breakdown](#comprehensive-file--directory-breakdown)
+  - [`package.json`](#packagejson)
+  - [`src/extension.ts`](#srcextensionts)
+  - [`src/adb.ts`](#srcadbts)
+  - [`src/webview.ts`](#srcwebviewts)
+  - [`src/wireless.ts`](#srcwirelessts)
+  - [`src/shell.ts`](#srcshellts)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Known Limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Features Overview
+## Overview
 
-AdbZen is packed with utility features designed to save seconds on every interaction, which translates to hours saved over a development lifecycle.
+AdbZen is a VS Code extension that brings Android Debug Bridge (ADB) control directly into your editor, so you don’t have to constantly switch to external terminals for everyday device operations. It is built with TypeScript, Node.js, and the VS Code Extension API, with webview-powered interfaces for interactive controls and fast UI feedback.
 
-- **Status Bar Integration:** A permanent, real-time indicator in the VS Code bottom status bar. It shows whether the ADB server is running, starting, or stopped, and displays a live count of connected USB and Wireless devices.
-- **Intelligent Device Diffing:** AdbZen monitors your connected devices in the background. If a device is plugged in, unplugged, or changes state (e.g., from "unauthorized" to "connected"), VS Code native toast notifications alert you immediately.
-- **One-Click Server Management:** Start, Kill, or Restart the ADB server directly from the sidebar. No more typing `adb kill-server` and `adb start-server`.
-- **Wireless QR Code Pairing:** Android 11+ supports wireless debugging. AdbZen generates a secure QR code right in your editor. Scan it with your phone, and AdbZen handles the mDNS negotiation and pairs the device automatically.
-- **Wireless Code Pairing:** Fallback support for pairing via the 6-digit code method provided by Android Developer Options.
-- **Auto-Connect:** Once paired wirelessly, AdbZen actively scans the network for the device's secondary debug port broadcast and connects automatically.
-- **Automated ADB Installation:** If ADB is missing from your system, AdbZen detects your OS and package manager (Homebrew, apt, winget, Chocolatey, Scoop, pacman, etc.) and offers a one-click installation button. On Windows, PATH updates are written to the **User** environment variables (no admin/UAC prompt required) and are immediately visible in your Environment Variables dialog under "User variables".
-- **Integrated Device Shells:** Instantly open a native VS Code terminal tab bound to a specific device's shell (`adb -s <serial> shell`). Perfect for multi-device testing.
-- **Custom Theming Engine:** All UI components use VS Code's internal CSS variables, meaning AdbZen looks flawless whether you use Monokai, Dracula, or the default Light theme.
+The extension focuses on reducing repetitive ADB friction: server state management, device monitoring, wireless pairing, shell launching, and installation help when ADB is missing. Instead of memorizing command syntax and manual reconnection flows, developers get a sidebar-first, visual workflow designed for multi-device Android development.
 
 ---
 
-## Prerequisites and Installation
+## Features
+
+### Core ADB Control
+
+- **One-click server actions**: Start, restart, and kill ADB server directly from the sidebar.
+- **Live status in Status Bar**:
+  - server health indicator (running/stopped/transitioning),
+  - connected device counts with richer hover details.
+- **Background polling + smart state updates**: Keeps UI aligned with real ADB status without manual refresh.
+- **Intelligent device diffing**: Detects plug/unplug/state transitions and reflects them in VS Code quickly.
+
+### Wireless Pairing & Connectivity
+
+- **QR-based pairing (Android 11+)**: Generate a pairing QR flow in-editor and pair from phone camera.
+- **Code-based pairing fallback**: Pair via IP, pairing port, and 6-digit code.
+- **mDNS discovery support**: Listens for `_adb-tls-pairing` / `_adb-tls-connect` broadcasts.
+- **Auto-connect workflow**: After pairing, tracks connection advertisement and connects automatically where possible.
+- **Port scan support for difficult networks**: Helps discover active ADB connect ports when network behavior is inconsistent.
+
+### Device Productivity & UX
+
+- **Integrated device shell launcher**: Open VS Code terminal directly into `adb -s <serial> shell`.
+- **Multi-device shell handling**: Quickly spin up separate terminal sessions for different devices.
+- **Custom target support**: Manually target serials/IP endpoints for non-standard workflows.
+- **Theme-native UI**: Uses VS Code theme variables for consistent appearance across themes.
+
+### Developer Experience
+
+- **ADB detection and install assist**:
+  - searches common local ADB paths,
+  - checks package managers (brew, apt, winget, choco, scoop, pacman, etc.),
+  - guides installation when missing.
+- **Zero heavy frontend dependency model** in webviews (vanilla DOM + extension messaging).
+- **Clear separation of concerns** between backend command logic and webview rendering logic.
+
+---
+
+## Tech Stack
+
+| Layer                | Technologies                               |
+| -------------------- | ------------------------------------------ |
+| Language             | TypeScript (primary), JavaScript (minimal) |
+| Runtime              | Node.js 20.x                               |
+| Editor Platform      | VS Code Extension API                      |
+| UI Rendering         | VS Code Webviews (HTML/CSS/Vanilla JS)     |
+| Device Communication | Android Debug Bridge (ADB CLI)             |
+| Network Discovery    | `bonjour-service` (mDNS / DNS-SD)          |
+| QR Generation        | `qrcode`                                   |
+| Process Execution    | `child_process.exec`                       |
+| License              | MIT                                        |
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- **Visual Studio Code:** Version 1.85.0 or higher.
-- **Operating System:** Windows 10/11, macOS (Intel or Apple Silicon), or any modern Linux distribution.
-- **Android SDK Platform-Tools (ADB):** While AdbZen can install ADB for you, having it pre-installed and added to your system's PATH environment variable provides the smoothest experience.
+- **Visual Studio Code**: `^1.85.0`
+- **OS**: Windows 10/11, macOS (Intel/Apple Silicon), or modern Linux
+- **ADB (Platform-Tools)**:
+  - Optional before install (AdbZen can help install it),
+  - recommended to have available in `PATH` for smoothest startup.
 
-### Installation Instructions
+### Installation
 
-1.  Open Visual Studio Code.
-2.  Navigate to the Extensions view by clicking the square icon on the left Activity Bar or pressing `Ctrl+Shift+X` (`Cmd+Shift+X` on macOS).
-3.  Search for **AdbZen**.
-4.  Click **Install**.
-5.  Once installed, a new Android device icon will appear on your Activity Bar. Click it to open the AdbZen control panel.
+1. Open **Visual Studio Code**.
+2. Go to **Extensions** (`Ctrl+Shift+X` on Windows/Linux, `Cmd+Shift+X` on macOS).
+3. Search for **AdbZen**.
+4. Click **Install**.
+5. Open the AdbZen view from the Activity Bar (Android device icon).
+
+For local development from source:
+
+```bash
+git clone https://github.com/tanishqmudaliar/AdbZen.git
+cd AdbZen
+npm install
+code .
+```
+
+Then press `F5` in VS Code to launch an Extension Development Host.
+
+---
+
+## Project Structure
+
+```text
+AdbZen/
+├── src/
+│   ├── extension.ts        # Extension activation, status bar updates, provider wiring
+│   ├── adb.ts              # ADB command execution, parsing, detection, package manager probing
+│   ├── webview.ts          # Main view HTML/CSS/JS generation and UI behavior
+│   ├── wireless.ts         # Wireless pairing flows (QR/code), mDNS scanning, auto-connect logic
+│   └── shell.ts            # Device shell webview + terminal spawn messaging
+├── package.json            # Extension manifest, contributions, scripts, metadata
+├── tsconfig.json           # TypeScript config
+├── README.md               # Project documentation
+└── LICENSE                 # MIT license
+```
+
+---
+
+## Architecture
+
+AdbZen follows a two-context architecture native to VS Code extensions:
+
+1. **Extension Host (Node.js context)**  
+   Owns ADB process execution, status polling, parsing, and system/network interactions.
+2. **Webview UI (sandboxed Chromium context)**  
+   Renders interactive panels (Main, Wireless, Shell), receives state updates, dispatches user actions.
+
+### Communication Pattern
+
+- Webview sends intent (`vscode.postMessage`) → Extension Host receives and executes command → Extension Host pushes updated state to webview (`webview.postMessage`) → UI rerenders.
+- This avoids shared mutable state between sandboxed UI and backend process logic.
+- State authority remains backend-first, improving resilience when webviews are recreated by VS Code.
+
+### Key Design Choices
+
+- **Webviews over TreeView** for richer interactivity (tabs, logs, form-driven pairing, dynamic cards).
+- **Polling over long-lived `track-devices` stream** for practical reliability and easier recovery cross-platform.
+- **Backend-authoritative device state** to avoid stale webview-only state.
+- **Explicit ADB-not-found handling** with guided remediation instead of generic command errors.
+
+---
+
+## Usage Guide
+
+### Main View (AdbZen)
+
+Use this as command center for day-to-day operations:
+
+- View server health and transition state.
+- Monitor USB / wireless / emulator counts.
+- Inspect connected/unauthorized devices.
+- Start, restart, or kill server quickly.
+- Review command/log feedback from extension actions.
+
+### Wireless Pairing View
+
+Three workflow modes are available:
+
+- **QR Pair**: Fastest for supported Android 11+ wireless debugging setups.
+- **Code Pair**: Manual fallback with IP + pairing port + 6-digit code.
+- **Connect / Scan**: Useful when pairing succeeded but connect endpoint/port changes.
+
+### Shell View
+
+- Shows actionable device cards.
+- One click opens terminal and injects `adb -s <serial> shell`.
+- Supports manual custom target entry for edge/networked scenarios.
+
+### Advanced Usage
+
+- Operate mixed environments (USB + emulator + wireless) simultaneously.
+- Open dedicated shell terminals per device for parallel debugging.
+- Use connect scan flow in restrictive networks where mDNS broadcasts are filtered.
 
 ---
 
 ## Comprehensive File & Directory Breakdown
 
-To fulfill the requirements of this project and provide complete transparency into the codebase, below is an exhaustive breakdown of the 6 core files located in the `src/` directory and the `package.json` manifest. These files represent the entirety of the application logic.
+### `package.json`
 
-### 1. `package.json`
+The extension manifest and integration contract with VS Code.
 
-The `package.json` file is the central nervous system of any Node.js project and the manifest for the VS Code extension.
+**Responsibilities**
 
-**Key Responsibilities:**
+- Declares extension metadata and engine compatibility.
+- Defines contributed views/containers in Activity Bar.
+- Registers scripts and dependencies.
 
-- **Metadata Declaration:** Defines the extension name (`adbzen`), display name, version, and description.
-- **Engine Requirements:** Enforces the minimum VS Code compatibility (`"vscode": "^1.85.0"`).
-- **Extension Contributions (`contributes`):** This is where AdbZen integrates into the VS Code UI.
-  - `viewsContainers`: Registers the AdbZen logo icon in the left-hand Activity Bar.
-  - `views`: Registers three distinct Webview panels inside that container: `adbzen.mainView` (Main Control), `adbzen.wirelessView` (Wireless Pairing), and `adbzen.shellView` (Device Shells).
-- **Dependencies:**
-  - `bonjour-service`: Crucial for mDNS (Multicast DNS) discovery. It allows the extension to scan the local Wi-Fi network for Android devices broadcasting their pairing and connection services.
-  - `qrcode`: Used to generate base64 data URLs of QR codes for the touchless wireless pairing feature.
-- **Scripts:** Standard npm scripts for compilation (`tsc`) and watch modes.
+**Notable contribution points**
 
-### 2. `src/extension.ts`
-
-This is the primary entry point for the extension. When VS Code fires the activation event, the `activate(context: vscode.ExtensionContext)` function inside this file is executed.
-
-**Key Responsibilities & Functions:**
-
-- **Status Bar Initialization:** It creates two `vscode.StatusBarItem` instances.
-  - `statusDotItem`: Displays a colored circle indicating server health (Green for running, Red for stopped, Amber for transitioning).
-  - `statusBarItem`: Displays the device counts with rich hover tooltips.
-- **Background Polling Engine:** It sets up a `setInterval` loop that ticks every 3000 milliseconds. On every tick, it queries the ADB status asynchronously and updates the status bar elements to reflect real-time changes without blocking the main UI thread.
-- **Device Diffing (`diffDevices`):** A sophisticated function that compares the previous array of connected devices against the current array. By utilizing JavaScript `Map` structures, it accurately detects newly connected devices, disconnected devices, and devices that have changed states (e.g., from `unauthorized` to `device`). It then triggers native `vscode.window.showInformationMessage` toasts to alert the developer.
-- **Webview Provider Registration:** It binds the logical classes (`AdbZenViewProvider`, `WirelessViewProvider`, `ShellViewProvider`) to their respective string IDs defined in the `package.json`.
-- **Main View Logic (`AdbZenViewProvider`):** Contains the event listeners for the main panel, handling messages dispatched from the frontend HTML (like "start", "kill", "restart", and "installAdb"). It executes the corresponding CLI commands and feeds the stdout/stderr back to the frontend's command log.
-
-### 3. `src/adb.ts`
-
-This file acts as the bridge between the Node.js JavaScript environment and the underlying system's `adb` binary executable. It heavily utilizes `child_process.exec` to spawn system commands.
-
-**Key Responsibilities & Functions:**
-
-- **Strong Typing:** Defines exact TypeScript interfaces for `AdbDeviceState`, `AdbConnectionType`, `AdbDevice`, and `AdbStatus`. This ensures type safety across the entire extension.
-- **Process Execution (`run`):** A Promisified wrapper around `child_process.exec`. It captures `stdout`, `stderr`, and exit codes safely.
-- **Output Parsing (`parseAdbDevices`):** The raw string output of `adb devices -l` is notoriously difficult to parse consistently. This function splits the string by newlines, uses regex to separate columns, and parses key-value pairs (like `model:Pixel_6` or `device:oriole`). It also intelligently detects if a connection is USB, an Emulator, or Wireless based on regex patterns in the serial number.
-- **Socket Verification (`isAdbServerListening`):** Instead of relying purely on CLI outputs to check if the server is running, this function attempts to open a raw TCP socket (`net.Socket`) to `127.0.0.1:5037` (the default ADB daemon port). This is significantly faster and more reliable than running a full command.
-- **Fallback Paths & Detection:** If ADB is not found in the global PATH, `findAdbInCommonPaths()` searches OS-specific directories (e.g., `/opt/homebrew/bin/adb` on Mac, `C:\Android\platform-tools` on Windows).
-- **Package Manager Detection:** `detectPackageManagers()` tests the system for `brew`, `winget`, `choco`, `apt`, `dnf`, etc., so the extension can automatically generate the correct installation command if ADB is missing entirely.
-- **Mass Port Scanning (`scanAdbPorts`):** A highly concurrent TCP port scanner used in the Wireless tab. It attempts to connect to a massive range of ports (37000 to 47000) on a target IP address using batches of 400 concurrent sockets with tight timeouts to rapidly find open ADB pairing ports.
-
-### 4. `src/webview.ts`
-
-This file houses the HTML, CSS, and client-side JavaScript for the Main Status View. Instead of loading an external HTML file, the entire view is returned as a massive string literal from the `getAdbZenHtml()` function.
-
-**Key Responsibilities:**
-
-- **Zero-Dependency Frontend:** To maximize load speed and minimize memory footprint, no frontend frameworks (React, Vue, Angular) are used. Everything is Vanilla DOM manipulation.
-- **Dynamic UI Rendering:** The embedded `<script>` tag handles incoming messages from the Extension Host. Based on the JSON payload, it toggles CSS classes to show/hide the "Not Installed" hero screen, updates the status dots, modifies the meta-information table (showing USB vs Wireless vs Emulator counts), and populates the device list cards.
-- **Automated Install UI:** If the backend detects ADB is missing, this view dynamically renders an installation screen showing exactly which package manager is available and provides a button to run the install command in a VS Code terminal.
-- **VS Code Theming Integration:** The CSS relies exclusively on CSS Variables injected by the VS Code host (e.g., `var(--vscode-sideBar-background)`, `var(--vscode-foreground)`, `var(--vscode-widget-border)`). This guarantees the UI looks native regardless of the user's color theme.
-
-### 5. `src/wireless.ts`
-
-This is arguably the most mathematically and logically complex file in the project. It handles the intricate dance of Wireless Pairing introduced in Android 11.
-
-**Key Responsibilities & Functions:**
-
-- **mDNS Scanning (`MdnsScanner` class):** Wraps the `bonjour-service` library. It listens for specific DNS-SD broadcasts (`adb-tls-pairing` and `adb-tls-connect`) on the local network.
-- **QR Code Flow (`_startQrFlow`):** 1. Generates a cryptographically random 6-digit password. 2. Constructs a special Wi-Fi connection string payload (`WIFI:T:ADB;S:ADBZen;P:123456;;`). 3. Uses the `qrcode` library to render this as a Base64 image and displays it to the user. 4. Simultaneously begins scanning the network for the pairing broadcast. 5. When the user scans the code, the phone broadcasts its IP and temporary port. The scanner catches this, extracts the IP/Port, and automatically executes `adb pair <ip>:<port> <password>`.
-- **Auto-Connect Flow (`_autoConnect`):** After successful pairing, the Android device closes the pairing port and opens a random connection port, broadcasting it via `adb-tls-connect`. The extension immediately scans for this new broadcast and issues the `adb connect` command, making the entire wireless process touchless.
-- **Manual Pairing:** Provides an alternative tab for users to manually input the IP, pairing port, and 6-digit code if their camera is broken or the network blocks mDNS traffic.
-- **Tabbed Interface:** The HTML payload includes a fully functional tabbed interface (QR Pair, Code Pair, Connect) managed via lightweight Vanilla JS.
-
-### 6. `src/shell.ts`
-
-This file implements the "Shell" Webview, designed for rapid, multi-device terminal access.
-
-**Key Responsibilities & Functions:**
-
-- **Isolated Polling:** While the main extension polls for status, this view independently requests a refresh of the device list when active, rendering each device as an interactive card.
-- **Native Terminal Spawning:** When a user clicks the "Open Shell" button on a device card, the frontend dispatches a message containing the device's serial number. The backend `ShellViewProvider` intercepts this and uses the VS Code API `vscode.window.createTerminal()` to spawn a brand new terminal instance.
-- **Command Injection:** Once the terminal is created, it automatically injects the command `adb -s <serial> shell` and forces the terminal to show. This provides an instant, isolated bash/sh environment on the selected device.
-- **Custom Target Handling:** Allows users to manually type an IP address or serial number to open a shell for a device that might be hidden, located on a remote server, or connected via a reverse proxy.
+- `viewsContainers`: registers AdbZen container.
+- `views`: registers main, wireless, and shell webview views.
+- Dependencies include:
+  - `bonjour-service` for local network service discovery,
+  - `qrcode` for wireless QR flow.
 
 ---
 
-## In-Depth Design Choices
+### `src/extension.ts`
 
-During the architecture and development of AdbZen, several critical design decisions were made to balance performance, usability, code maintainability, and the strict sandboxing rules of Visual Studio Code.
+Primary extension entrypoint executed during activation.
 
-### 1. Webviews vs. Native TreeViews
+**Responsibilities**
 
-VS Code offers a native "TreeView" API for sidebar extensions (which looks and behaves exactly like the standard File Explorer). Initially, this seemed like the logical choice for listing connected devices.
-**The Choice:** I opted to use HTML-based Webviews instead.
-**The Reasoning:** TreeViews are heavily restricted by the VS Code API. You can only display plain text, basic icons, and context menus. Because AdbZen required complex interactive elements—such as displaying dynamically generated QR codes, input forms for 6-digit pairing codes, real-time command output logs, and horizontal progress bars for port scanning—Webviews were the _only_ viable choice. To mitigate the performance overhead of loading full web pages in the sidebar, I rigorously avoided bundling external heavy frameworks like React, Vue, or Tailwind.
+- Initializes status bar items and UI state loop.
+- Registers webview providers.
+- Coordinates command handling from webviews.
+- Maintains periodic refresh/polling for ADB status/devices.
 
-### 2. Polling vs. Event Listeners for ADB Status
+**Notable behavior**
 
-The extension needs to know the exact moment a device is plugged in or unplugged to update the UI and trigger notifications. ADB provides a long-running command called `adb track-devices` which keeps a persistent connection open and emits a text stream of events.
-**The Choice:** I chose to use a simple polling mechanism (`setInterval` running `adb devices` every 3 seconds) rather than maintaining a persistent stream.
-**The Reasoning:** While `track-devices` is theoretically a "cleaner" event-driven approach, it is notoriously brittle across different operating systems (especially Windows). If the VS Code extension host crashes or reloads, it can easily leave zombie `adb` processes running in the background, consuming memory. ADB is highly optimized by Google to respond to the `adb devices` command instantly via its background daemon, meaning the CPU overhead of polling is virtually zero, but the reliability and fault tolerance is absolutely perfect.
-
-### 3. Centralized vs. Decentralized State
-
-**The Choice:** Application state (like the master list of connected devices) is kept authoritative in the Extension Host (`extension.ts`), which pushes updates _down_ to the Webviews.
-**The Reasoning:** VS Code Webviews are essentially sandboxed iframes. They can be dynamically destroyed and recreated by the editor when the user hides or shows the sidebar, or switches panels. By keeping the "source of truth" in the background Node.js process and pushing it to the UI via `postMessage`, the UI can instantly and flawlessly recover its state without needing to re-query the operating system.
-
-### 4. Handling Missing ADB Executables
-
-Many junior developers struggle to configure their system PATH variables correctly.
-**The Choice:** Instead of throwing a generic "ADB command not found" error, the extension actively searches the file system and interrogates the OS.
-**The Reasoning:** Good tooling should assist the user, not just report failures. If the executable exists but isn't in the PATH, the extension tells the user exactly where it was found (e.g., `C:\Android\platform-tools`). If it doesn't exist at all, the code dynamically checks for the presence of `brew`, `winget`, `choco`, or `apt` and provides a localized, one-click button to install the Android platform tools. This dramatically reduces the barrier to entry for new developers.
-
-### 5. Separation of Concerns in Webview Panels
-
-**The Choice:** The UI is split into three distinct Webview panels (Main Status, Wireless Pairing, Shell Access) rather than one massive, scrolling page.
-**The Reasoning:** This mimics native VS Code behavior (similar to the Source Control tab, which has separate collapsible dropdown sections for Commits, Branches, and Changes). It allows users to collapse panels they aren't actively using (for example, hiding the Wireless panel entirely if they only ever use USB connections) to save valuable vertical screen real estate in the sidebar.
+- Device diffing logic compares prior/current snapshots for meaningful updates.
+- Backend dispatches normalized state payloads to the active webview(s).
+- Centralized orchestration for server control actions and UI synchronization.
 
 ---
 
-## User Interface Guide
+### `src/adb.ts`
 
-### Main View (AdbZen)
+Core ADB operations and OS-facing command layer.
 
-This is your command center.
+**Responsibilities**
 
-- **Status Banner:** Shows the current server status. A green dot means running, red means stopped, and spinning amber means it is currently executing a startup/shutdown command.
-- **Metrics Panel:** Displays a breakdown of your connections. It categorizes them by USB, Wireless, and Emulators. It also highlights "Unauthorized" devices, reminding you to look at your phone screen and tap the RSA key fingerprint "Allow" prompt.
-- **Connected Devices List:** A card-based list showing device serial numbers, connection types, and internal codenames (e.g., `pixel_6`).
-- **Server Controls:** Three primary buttons: **Start Server**, **Restart Server**, and **Kill Server**.
-- **Command Log:** A terminal-like window at the bottom of the panel that echoes every background command the extension runs, giving you total transparency into what the system is doing.
+- Wraps process execution safely.
+- Parses `adb devices -l` output into typed structures.
+- Detects ADB executable availability and fallback paths.
+- Probes package manager availability for install guidance.
+- Verifies server listening behavior via socket checks.
+- Provides scanning helpers for wireless workflows.
 
-### Wireless Pairing View
+**Why it matters**
 
-- **QR Pair Tab:** The fastest way to connect. Open Developer Options on your phone, navigate to Wireless Debugging, select "Pair device with QR code", and point your camera at the screen. AdbZen handles the rest automatically.
-- **Code Pair Tab:** If your camera is broken, select "Pair device with pairing code" on your phone. Note the 5-digit port and the 6-digit code. Enter them into the input fields in this tab.
-- **Connect Tab:** Used for managing active wireless connections. It features a "Scan Ports" button. If you know your device's IP but the port keeps changing, hit scan, and AdbZen will aggressively probe the IP to find the open debug port for you.
-
-### Shell View
-
-- **Device Cards:** Similar to the main view, but optimized for action.
-- **Open Shell Button:** Clicking this opens a standard VS Code terminal tab and drops you straight into the root or user shell of the selected device.
-- **Custom Target:** A text input at the bottom allowing you to manually type a connection string if you are working with remote adb servers over VPNs.
+- Isolates system command complexity from UI and extension control surfaces.
+- Standardizes response format and error handling for upstream consumers.
 
 ---
 
-## Under the Hood: Architecture
+### `src/webview.ts`
 
-### The Communication Bridge
+Main panel webview content generator.
 
-Because VS Code Extensions run in a separate Node.js process from the Webview (which runs in a Chromium sandbox), they cannot share memory or variables directly.
+**Responsibilities**
 
-AdbZen utilizes a robust Message Passing architecture:
+- Produces HTML/CSS/JS payload for the primary control view.
+- Handles frontend message listeners for backend updates.
+- Implements dynamic rendering for installed/missing ADB states.
+- Applies VS Code theme variables for native look-and-feel.
 
-1.  **Frontend to Backend:** When a user clicks a button (e.g., "Kill Server"), the frontend JS executes:
-    ```javascript
-    vscode.postMessage({ command: "kill" });
-    ```
-2.  **Backend Interception:** The `extension.ts` file listens for this message:
-    ```typescript
-    webviewView.webview.onDidReceiveMessage(async (msg) => {
-      if (msg.command === "kill") {
-        await this._killServer();
-      }
-    });
-    ```
-3.  **System Execution:** The backend executes the raw CLI command using `child_process`.
-4.  **Backend to Frontend:** The backend gathers the results and pushes state back down:
-    ```typescript
-    this._view.webview.postMessage({ command: "status", data: newStatus });
-    ```
-5.  **Frontend Rendering:** The frontend JS catches the `status` message and updates the DOM elements.
+**Frontend approach**
 
-### Bonjour/mDNS Service Discovery
-
-Android's wireless debugging relies on DNS-Based Service Discovery (DNS-SD) over Multicast DNS (mDNS).
-When a device is ready to pair, it broadcasts a service of type `_adb-tls-pairing._tcp.local`.
-The `bonjour-service` library in `wireless.ts` joins the multicast group on the local Wi-Fi interface and listens for these UDP packets. Once a packet matches the service signature, AdbZen extracts the IP address and the dynamically assigned port, allowing it to execute the pairing command without the user ever typing an IP address.
+- Vanilla DOM manipulation (no heavy framework overhead).
+- Lightweight state transitions based on backend message events.
 
 ---
 
-## Advanced Usage
+### `src/wireless.ts`
 
-### Working with Multiple Devices
+Wireless debugging and pairing engine.
 
-AdbZen excels when testing applications across multiple devices simultaneously.
-If you have a physical phone on USB, an emulator running, and a tablet connected wirelessly:
+**Responsibilities**
 
-1.  All three will appear cleanly in the **AdbZen** main list.
-2.  Navigate to the **Shell** tab.
-3.  You can open three separate terminal tabs by clicking "Open Shell" on each card. VS Code will automatically name the terminal tabs based on the device serial/model, keeping your workspaces highly organized.
+- mDNS scanning for pairing/connect service advertisements.
+- QR pairing flow generation and session handling.
+- Manual pairing flow for constrained environments.
+- Auto-connect orchestration after successful pair handshake.
+- Tabbed UI behaviors for pairing/connect modes.
 
-### Troubleshooting Network Configurations
+**Operational detail**
 
-If Wireless Pairing fails, it is almost always a local network issue.
-
-- Ensure both your development machine and the Android device are on the exact same Wi-Fi SSID.
-- Ensure your router does not have "Client Isolation" or "AP Isolation" enabled (which prevents devices on the same Wi-Fi from talking to each other).
-- If mDNS broadcasts are being dropped by a corporate firewall, fall back to the **Connect** tab, enter the IP manually, and use the **Scan Ports** feature.
+- Handles Android wireless debug lifecycle nuances (pair endpoint vs connect endpoint).
+- Supports network fallback patterns when discovery is partially blocked.
 
 ---
 
-## Troubleshooting & FAQ
+### `src/shell.ts`
 
-**Q: AdbZen says "ADB Not Installed" but I know I have it!**
-A: This means ADB is not in your system's global `PATH` environment variable. AdbZen attempts to look in common default directories — including WinGet's package folder on Windows — and if it finds ADB there, it will offer an "Add to PATH" button. This writes to your **User PATH** (not System PATH), so look under "User variables" in the Environment Variables dialog, not "System variables". Restart VS Code after updating your PATH for it to take effect everywhere.
+Device-shell-focused webview behavior and terminal integration.
 
-**Q: The QR Code pairing is timing out.**
-A: Ensure your phone is awake and the camera is actively scanning the code. The mDNS broadcast only happens while the phone's QR scanning screen is active. If it still fails, your network might be blocking mDNS packets.
+**Responsibilities**
 
-**Q: I authorized the device on my phone, but AdbZen still says "Unauthorized".**
-A: ADB sometimes caches the RSA key status. Click the **Restart Server** button in the AdbZen main panel. This will kill the daemon, restart it, and force a fresh handshake with your device.
+- Renders device actions for shell workflows.
+- Requests up-to-date device information when view is active.
+- Sends selected target to backend terminal creation flow.
+- Supports manual target strings for custom setups.
 
-**Q: Can I use this with remote servers?**
-A: Yes. If you have an ADB daemon running on a remote server with exposed ports, you can use the Custom Target input in the Shell tab or the Connect tab to establish a TCP/IP connection.
+**Result**
 
----
-
-## Development & Building from Source
-
-If you wish to contribute to AdbZen or compile it yourself from source:
-
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/tanishqmudaliar/AdbZen.git](https://github.com/tanishqmudaliar/AdbZen.git)
-    cd AdbZen
-    ```
-2.  **Install dependencies:**
-    Ensure you have Node.js v20+ installed.
-    ```bash
-    npm install
-    ```
-3.  **Open in VS Code:**
-    ```bash
-    code .
-    ```
-4.  **Run the Extension:**
-    Press `F5`. This will compile the TypeScript code and launch a new VS Code window (Extension Development Host) with AdbZen loaded.
-5.  **Watch Mode:**
-    Run `npm run watch` in the terminal. Any changes you make to the `.ts` files will automatically be recompiled. Use `Ctrl+R` in the Development Host window to reload the extension.
+- Rapid context switching into per-device shells without command typing overhead.
 
 ---
 
-## Roadmap & Future Enhancements
+## Configuration
 
-The vision for AdbZen is to completely replace external ADB GUI tools (like Android Studio's Device Manager) for VS Code users.
+AdbZen is designed to work with minimal manual setup, but runtime behavior depends on environment configuration:
 
-**Planned Features for v1.x:**
+| Config Area               | What to Set                                        | Why It Matters                                           |
+| ------------------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| System `PATH`             | Include ADB binary location (`platform-tools`)     | Enables direct command execution without fallback lookup |
+| VS Code Version           | `^1.85.0` or newer                                 | Required for extension compatibility                     |
+| Node.js (for local build) | 20.x                                               | Ensures build/runtime compatibility in development       |
+| Local Network             | Same Wi-Fi subnet for host + phone (wireless mode) | Required for reliable mDNS discovery and pairing flow    |
+| Router Settings           | Disable AP/client isolation for wireless pairing   | Prevents peer blocking between dev machine and device    |
 
-- **Logcat Integration:** A dedicated Webview panel to stream, filter, and colorize Android logcat output directly inside VS Code.
-- **APK Sideloading:** Drag-and-drop functionality to instantly push and install `.apk` files to specific devices.
-- **File Explorer:** A visual file browser for the Android file system, allowing easy pulling and pushing of database files, preferences, and assets.
-- **Screen Mirroring:** Integration with `scrcpy` to embed a live, interactive video feed of the device screen within a VS Code editor tab.
-- **Process Management:** UI to quickly force-stop or clear data for specific application packages.
+---
+
+## Troubleshooting
+
+| Problem                                    | Likely Cause                                         | Fix                                                                             |
+| ------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| “ADB Not Installed” shown but ADB exists   | ADB not exposed in global `PATH`                     | Add `platform-tools` to `PATH`, restart VS Code, or use built-in install assist |
+| QR pairing times out                       | Phone not actively scanning OR mDNS traffic filtered | Keep pairing screen open; if blocked, use Code Pair and Connect workflow        |
+| Device remains “Unauthorized”              | ADB auth state cache mismatch                        | Restart ADB server from AdbZen and re-approve RSA prompt on device              |
+| Wireless connect unstable                  | Dynamic connect port/network filtering               | Use connect scan flow and verify both devices are on same subnet                |
+| Device not discoverable on corporate Wi-Fi | Client isolation/firewall policy                     | Switch network, disable isolation if possible, or use manual target approach    |
+
+---
+
+## Known Limitations
+
+- Wireless workflows are sensitive to local network policy (mDNS and peer visibility).
+- Behavior can vary across OEM Android implementations and security overlays.
+- Port-scan fallback is practical but network-dependent on restricted environments.
+- VS Code webview lifecycle means UI can be recreated; backend state authority mitigates this but does not eliminate all transient refresh moments.
+
+---
+
+## Roadmap
+
+Planned enhancements include:
+
+- **Logcat integration** with filtering/colorization.
+- **APK sideload UX** for targeted device install flows.
+- **Device file explorer** for pull/push workflows.
+- **Optional screen mirroring integration** (e.g., `scrcpy`-style workflow).
+- **Process/app controls** (force-stop / clear data style actions).
 
 ---
 
 ## Contributing
 
-Contributions are highly encouraged! Please feel free to submit Pull Requests or open Issues for bugs and feature requests.
+Contributions are welcome.
 
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Adhere to the project's ESLint rules (run `npx eslint .` to check).
-4.  Commit your changes (`git commit -m 'Add amazing feature'`).
-5.  Push to the branch (`git push origin feature/amazing-feature`).
-6.  Open a Pull Request.
+1. Fork the repo.
+2. Create a branch: `git checkout -b feature/amazing-feature`
+3. Make your changes with clear commits.
+4. Run lint/build checks locally.
+5. Push branch and open a Pull Request.
+
+If reporting bugs, include:
+
+- OS,
+- VS Code version,
+- device type/Android version,
+- exact reproduction steps,
+- relevant AdbZen logs/screenshots.
 
 ---
 
 ## License
 
-This project is open-source and distributed under the terms of the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## Author & Acknowledgements
+Made with ❤️ by [Tanishq Mudaliar](https://github.com/tanishqmudaliar)
 
-Created and maintained by **Tanishq Mudaliar**.
-
-Special thanks to the Open Source community, the creators of the `qrcode` and `bonjour-service` npm packages, and the VS Code Extension API documentation team.
-
-_Stop typing IP addresses. Start coding. Find your Zen._
+Stop typing IP addresses. Start coding. Find your Zen.
