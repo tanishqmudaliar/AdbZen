@@ -1,6 +1,6 @@
 import * as net from "net";
 import * as vscode from "vscode";
-import { run, scanAdbPorts } from "./adb.js";
+import { getAdbDevices, run, scanAdbPorts } from "./adb.js";
 import { notify, notifyWithActions, withProgress } from "./extension.js";
 import Bonjour from "bonjour-service";
 import type { Service } from "bonjour-service";
@@ -402,10 +402,10 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
       this._post("deviceCheck", { connected: false });
       return;
     }
-    const r = await run("adb devices");
     const target = `${ip}:${port}`;
-    const line = r.stdout.split("\n").find((l) => l.startsWith(target));
-    const connected = line ? line.split(/\s+/)[1] === "device" : false;
+    const connected = (await getAdbDevices("adb devices")).some(
+      (device) => device.serial === target && device.state === "device",
+    );
     this._post("deviceCheck", { connected, target });
   }
 }

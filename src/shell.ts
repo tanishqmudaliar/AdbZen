@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { run, parseAdbDevices } from "./adb.js";
+import { getAdbDevices } from "./adb.js";
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
@@ -42,8 +42,7 @@ export class ShellViewProvider implements vscode.WebviewViewProvider {
     if (!this._view) {
       return;
     }
-    const r = await run("adb devices -l");
-    const devices = parseAdbDevices(r.stdout);
+    const devices = await getAdbDevices();
     this._view.webview.postMessage({ command: "devices", data: devices });
   }
 

@@ -45,6 +45,9 @@ export type AdbPlatformInfo = {
 
 type ExecResult = { stdout: string; stderr: string; code: number | null };
 
+let adbServerOperation: Promise<void> = Promise.resolve();
+let intentionalStop = false;
+
 export function run(cmd: string): Promise<ExecResult> {
   return new Promise((resolve) => {
     exec(
@@ -58,6 +61,35 @@ export function run(cmd: string): Promise<ExecResult> {
       },
     );
   });
+}
+
+export function withAdbServerOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const queued = adbServerOperation.then(operation, operation);
+  adbServerOperation = queued.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queued;
+}
+
+export function markAdbServerStarting(): void {
+  intentionalStop = false;
+}
+
+export function markAdbServerStopping(): void {
+  intentionalStop = true;
+}
+
+async function readAdbDevices(command: string): Promise<AdbDevice[]> {
+  if (intentionalStop || !(await isAdbServerListening())) {
+    return [];
+  }
+  const list = await run(command);
+  return parseAdbDevices(list.stdout);
+}
+
+export async function getAdbDevices(command = "adb devices -l"): Promise<AdbDevice[]> {
+  return withAdbServerOperation(() => readAdbDevices(command));
 }
 
 const VALID_STATES = new Set<string>([
@@ -260,51 +292,46 @@ export async function getPlatformInfo(): Promise<AdbPlatformInfo> {
 }
 
 export async function getAdbStatus(): Promise<AdbStatus> {
-  const { stdout } = await run("adb version");
-  const isInstalled = /android debug bridge/i.test(stdout);
+  return withAdbServerOperation(async () => {
+    const { stdout } = await run("adb version");
+    const isInstalled = /android debug bridge/i.test(stdout);
 
-  if (!isInstalled) {
-    const platformInfo = await getPlatformInfo();
-    return {
-      installed: false,
-      version: null,
-      serverRunning: false,
-      devices: [],
-      error: null,
-      operation: null,
-      platformInfo,
-    };
-  }
+    if (!isInstalled) {
+      const platformInfo = await getPlatformInfo();
+      return {
+        installed: false,
+        version: null,
+        serverRunning: false,
+        devices: [],
+        error: null,
+        operation: null,
+        platformInfo,
+      };
+    }
 
-  const match = (stdout.split("\n")[0] ?? "").match(/Version\s+([\d.]+)/i);
-  const version = match ? match[1] : (stdout.split("\n")[0] ?? "");
-  const serverRunning = await isAdbServerListening();
-  let devices: AdbDevice[] = [];
-  if (serverRunning) {
-    const list = await run("adb devices -l");
-    devices = parseAdbDevices(list.stdout);
-    const mismatch =
-      list.stderr.includes("out of date") ||
-      list.stderr.includes("doesn't match");
+    const match = (stdout.split("\n")[0] ?? "").match(/Version\s+([\d.]+)/i);
+    const version = match ? match[1] : (stdout.split("\n")[0] ?? "");
+    const serverRunning = await isAdbServerListening();
+    let devices: AdbDevice[] = [];
+    let error: string | null = null;
+    if (serverRunning && !intentionalStop) {
+      const list = await run("adb devices -l");
+      devices = parseAdbDevices(list.stdout);
+      const mismatch =
+        list.stderr.includes("out of date") ||
+        list.stderr.includes("doesn't match");
+      error = mismatch ? "ADB server version mismatch detected" : null;
+    }
     return {
       installed: true,
       version,
       serverRunning,
       devices,
-      error: mismatch ? "ADB server version mismatch detected" : null,
+      error,
       operation: null,
       platformInfo: null,
     };
-  }
-  return {
-    installed: true,
-    version,
-    serverRunning,
-    devices,
-    error: null,
-    operation: null,
-    platformInfo: null,
-  };
+  });
 }
 
 export async function scanAdbPorts(

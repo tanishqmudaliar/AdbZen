@@ -40,6 +40,7 @@ ADB manager for VS Code — wireless pairing, device shells, server control, aut
   - [`src/wireless.ts`](#srcwirelessts)
   - [`src/shell.ts`](#srcshellts)
 - [Configuration](#configuration)
+- [Repository Maintenance](#repository-maintenance)
 - [Troubleshooting](#troubleshooting)
 - [Known Limitations](#known-limitations)
 - [Roadmap](#roadmap)
@@ -61,6 +62,7 @@ The extension focuses on reducing repetitive ADB friction: server state manageme
 ### Core ADB Control
 
 - **One-click server actions**: Start, restart, and kill ADB server directly from the sidebar.
+- **Persistent server lifecycle**: Closing VS Code does not stop the independent ADB daemon. After an intentional kill, AdbZen suppresses background device polls so they do not implicitly start the daemon again.
 - **Live status in Status Bar**:
   - server health indicator (running/stopped/transitioning),
   - connected device counts with richer hover details.
@@ -345,7 +347,34 @@ AdbZen is designed to work with minimal manual setup, but runtime behavior depen
 
 ---
 
+## Repository Maintenance
+
+AdbZen includes lightweight GitHub automation under `.github/`:
+
+- **CI workflow** (`.github/workflows/ci.yml`) runs on pushes to `main` and pull requests. It installs the lockfile dependencies with `npm ci`, compiles TypeScript, and packages the extension.
+- **CodeQL** (`.github/workflows/codeql.yml`) scans JavaScript and TypeScript for security issues on changes and weekly.
+- **Dependency Review** (`.github/workflows/dependency-review.yml`) checks dependency changes introduced by pull requests.
+- **Dependabot** (`.github/dependabot.yml`) checks npm dependencies weekly and GitHub Actions monthly, then opens update pull requests within the configured limit.
+- **Tag-based VSIX releases** (`.github/workflows/release.yml`) packages a version tag such as `v1.0.1` and attaches the `.vsix` to a GitHub Release. It does not publish to the Marketplace.
+
+Other common repository bots can be added later when their policy is clear:
+
+| Automation | Purpose | Recommendation for AdbZen |
+| --- | --- | --- |
+| CodeQL | Finds security issues in JavaScript/TypeScript | Good next addition once CI is stable |
+| Dependency review | Blocks new vulnerable dependencies in pull requests | Good for pull-request protection |
+| Secret scanning / push protection | Detects credentials committed to Git | Enable in repository settings |
+| Release automation | Builds and publishes `.vsix` files and release notes | Add only after deciding how releases are versioned and approved |
+| Stale bot | Closes inactive issues or pull requests | Usually avoid initially; it can hide useful reports |
+| Renovate | More customizable dependency updates than Dependabot | Do not run alongside Dependabot |
+
+Bots do not replace review: CI verifies that the project still builds, Dependabot proposes dependency changes, and security tools provide findings that still need triage. For this repository, CI and Dependabot are a safe baseline; CodeQL, dependency review, and secret scanning are the next useful layers.
+
 ## Troubleshooting
+
+### Why does the server return after I kill it?
+
+ADB client commands such as `adb devices`, `adb connect`, and `adb pair` can start the ADB daemon automatically when it is not running. AdbZen therefore gates its background device checks after an intentional **Kill Server** action. Other tools, including Android Studio, another terminal, or another VS Code extension, can still start ADB because they run outside AdbZen's control.
 
 | Problem                                    | Likely Cause                                         | Fix                                                                             |
 | ------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------- |

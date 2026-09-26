@@ -54,6 +54,7 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "tsc -p ./",
+    "lint": "eslint src",
     "watch": "tsc -watch -p ./",
     "package": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify"
   },
@@ -62,6 +63,9 @@
     "@types/qrcode": "^1.5.6",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.28.1",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "@vscode/vsce": "^3.0.0",
     "typescript": "^5.3.0"
   },
   "dependencies": {

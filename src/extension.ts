@@ -8,7 +8,9 @@ import {
   isAdbServerListening,
   run,
   getInstallCommand,
-  parseAdbDevices,
+  markAdbServerStarting,
+  markAdbServerStopping,
+  withAdbServerOperation,
 } from "./adb.js";
 import { getAdbZenHtml } from "./webview.js";
 import { WirelessViewProvider } from "./wireless.js";
@@ -364,38 +366,35 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     updateStatusBar("starting");
     await this._sendStatus();
 
-    await withProgress("Starting ADB server…", async (progress) => {
-      progress.report({ message: "Running adb start-server" });
-      await this._exec("adb start-server");
-      progress.report({ message: "Waiting for server…" });
-      const ok = await this._waitForServerState(true);
-      if (ok) {
-        notify("info", "ADB server started");
-        updateStatusBar("running");
-      } else {
-        updateStatusBar("stopped");
-        await notifyWithActions(
-          "error",
-          "ADB server failed to start",
-          {
-            label: "Retry",
-            action: () => this._startServer(),
-          },
-          {
-            label: "View Log",
-            action: () => {
-              void vscode.commands.executeCommand(
-                "workbench.view.extension.adbzen-sidebar",
-              );
-            },
-          },
+    const ok = await withProgress("Starting ADB server…", async (progress) =>
+      withAdbServerOperation(async () => {
+        progress.report({ message: "Running adb start-server" });
+        await this._exec("adb start-server");
+        progress.report({ message: "Waiting for server…" });
+        const started = await this._waitForServerState(true);
+        if (started) markAdbServerStarting();
+        this._log(
+          started ? "output" : "error",
+          started ? "ADB server is running" : "Server did not start in time",
         );
-      }
-      this._log(
-        ok ? "output" : "error",
-        ok ? "ADB server is running" : "Server did not start in time",
-      );
-    });
+        return started;
+      }),
+    );
+    if (ok) {
+      notify("info", "ADB server started");
+      updateStatusBar("running");
+    } else {
+      updateStatusBar("stopped");
+      await notifyWithActions("error", "ADB server failed to start", {
+        label: "Retry",
+        action: () => this._startServer(),
+      }, {
+        label: "View Log",
+        action: () => void vscode.commands.executeCommand(
+          "workbench.view.extension.adbzen-sidebar",
+        ),
+      });
+    }
 
     this._operation = null;
     await this._sendStatus();
@@ -406,38 +405,35 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
     updateStatusBar("killing");
     await this._sendStatus();
 
-    await withProgress("Killing ADB server…", async (progress) => {
-      progress.report({ message: "Running adb kill-server" });
-      await this._exec("adb kill-server");
-      progress.report({ message: "Waiting for shutdown…" });
-      const ok = await this._waitForServerState(false);
-      if (ok) {
-        notify("info", "ADB server stopped");
-        updateStatusBar("stopped");
-        _prevDevices = [];
-      } else {
-        await notifyWithActions(
-          "error",
-          "ADB server did not stop in time",
-          {
-            label: "Retry",
-            action: () => this._killServer(),
-          },
-          {
-            label: "View Log",
-            action: () => {
-              void vscode.commands.executeCommand(
-                "workbench.view.extension.adbzen-sidebar",
-              );
-            },
-          },
+    markAdbServerStopping();
+    const ok = await withProgress("Killing ADB server…", async (progress) =>
+      withAdbServerOperation(async () => {
+        progress.report({ message: "Running adb kill-server" });
+        await this._exec("adb kill-server");
+        progress.report({ message: "Waiting for shutdown…" });
+        const stopped = await this._waitForServerState(false);
+        this._log(
+          stopped ? "output" : "error",
+          stopped ? "ADB server is stopped" : "Server did not stop in time",
         );
-      }
-      this._log(
-        ok ? "output" : "error",
-        ok ? "ADB server is stopped" : "Server did not stop in time",
-      );
-    });
+        return stopped;
+      }),
+    );
+    if (ok) {
+      notify("info", "ADB server stopped");
+      updateStatusBar("stopped");
+      _prevDevices = [];
+    } else {
+      await notifyWithActions("error", "ADB server did not stop in time", {
+        label: "Retry",
+        action: () => this._killServer(),
+      }, {
+        label: "View Log",
+        action: () => void vscode.commands.executeCommand(
+          "workbench.view.extension.adbzen-sidebar",
+        ),
+      });
+    }
 
     this._operation = null;
     await this._sendStatus();
@@ -450,51 +446,46 @@ class AdbZenViewProvider implements vscode.WebviewViewProvider {
 
     const ok = await withProgress(
       "Restarting ADB server…",
-      async (progress) => {
-        progress.report({ message: "Stopping server…", increment: 0 });
-        await this._exec("adb kill-server");
-        const stopped = await this._waitForServerState(false);
-        this._log(
-          stopped ? "output" : "error",
-          stopped ? "Server stopped" : "Server did not stop in time",
-        );
-
-        progress.report({ message: "Starting server…", increment: 50 });
-        await this._exec("adb start-server");
-        const started = await this._waitForServerState(true);
-        progress.report({ increment: 50 });
-
-        if (started) {
-          notify("info", "ADB server restarted successfully");
-          updateStatusBar("running");
-        } else {
-          updateStatusBar("stopped");
-          await notifyWithActions(
-            "error",
-            "ADB server restart did not complete in time",
-            {
-              label: "Retry",
-              action: () => this._restartServer(),
-            },
-            {
-              label: "View Log",
-              action: () => {
-                void vscode.commands.executeCommand(
-                  "workbench.view.extension.adbzen-sidebar",
-                );
-              },
-            },
+      (progress) =>
+        withAdbServerOperation(async () => {
+          markAdbServerStopping();
+          progress.report({ message: "Stopping server…", increment: 0 });
+          await this._exec("adb kill-server");
+          const stopped = await this._waitForServerState(false);
+          this._log(
+            stopped ? "output" : "error",
+            stopped ? "Server stopped" : "Server did not stop in time",
           );
-        }
-        this._log(
-          started ? "output" : "error",
-          started
-            ? "ADB server restarted successfully"
-            : "Server restart did not finish in time",
-        );
-        return started;
-      },
+
+          progress.report({ message: "Starting server…", increment: 50 });
+          await this._exec("adb start-server");
+          const started = await this._waitForServerState(true);
+          progress.report({ increment: 50 });
+          if (started) markAdbServerStarting();
+          this._log(
+            started ? "output" : "error",
+            started
+              ? "ADB server restarted successfully"
+              : "Server restart did not finish in time",
+          );
+          return started;
+        }),
     );
+    if (ok) {
+      notify("info", "ADB server restarted successfully");
+      updateStatusBar("running");
+    } else {
+      updateStatusBar("stopped");
+      await notifyWithActions("error", "ADB server restart did not complete in time", {
+        label: "Retry",
+        action: () => this._restartServer(),
+      }, {
+        label: "View Log",
+        action: () => void vscode.commands.executeCommand(
+          "workbench.view.extension.adbzen-sidebar",
+        ),
+      });
+    }
 
     this._operation = null;
     await this._sendStatus();
