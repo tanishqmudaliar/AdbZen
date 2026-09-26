@@ -44,6 +44,18 @@ jobs:
           package_version="$(node -p "require('./package.json').version")"
           test "$tag_version" = "$package_version"
 
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          release_tag="${{ inputs.tag || github.ref_name }}"
+          tag_version="${release_tag#v}"
+          awk -v version="$tag_version" '
+            $0 ~ "^## \\[" version "\\]" { in_section=1; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > release-notes.md
+          test -s release-notes.md
+
       - name: Compile
         run: npm run compile
 
@@ -64,7 +76,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          generate_release_notes: true
+          body_path: release-notes.md
           files: "*.vsix"
 
   publish:
