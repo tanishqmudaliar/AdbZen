@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,6 +24,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,7 +39,8 @@ jobs:
       - name: Verify version matches tag
         shell: bash
         run: |
-          tag_version="${GITHUB_REF_NAME#v}"
+          release_tag="${{ inputs.tag || github.ref_name }}"
+          tag_version="${release_tag#v}"
           package_version="$(node -p "require('./package.json').version")"
           test "$tag_version" = "$package_version"
 
