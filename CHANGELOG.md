@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-26
+
+### Fixed
+
+- Updated the minimum VS Code engine version to match the current `@types/vscode` dependency so VSIX packaging succeeds.
+
 ## [1.1.1] - 2026-09-26
 
 ### Added
@@ -64,7 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Notifications:** Real-time VS Code native toast notifications for device connections, disconnections, and RSA authorization changes.
 - **Command Log Terminal:** Integrated terminal view in the sidebar to track all raw CLI commands executed by AdbZen and their outputs.
 
-[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.2...v1.0.0
