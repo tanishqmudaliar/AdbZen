@@ -49,12 +49,16 @@ jobs:
         run: |
           release_tag="${{ inputs.tag || github.ref_name }}"
           tag_version="${release_tag#v}"
+          git fetch --tags --force
+          previous_tag="$(git tag --sort=-v:refname | grep -Fxv "$release_tag" | head -n 1)"
+          test -n "$previous_tag"
           awk -v version="$tag_version" '
             $0 ~ "^## \\[" version "\\]" { in_section=1; next }
             in_section && /^## \[/ { exit }
             in_section { print }
           ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > release-notes.md
           test -s release-notes.md
+          printf '\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/%s...%s\n' "$previous_tag" "$release_tag" >> release-notes.md
 
       - name: Compile
         run: npm run compile
