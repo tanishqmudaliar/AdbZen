@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-26
+
+### Added
+
+- Repository CI, CodeQL, dependency review, Dependabot, and tag-based VSIX release automation.
+
+### Changed
+
+- ADB server lifecycle handling now preserves the daemon when VS Code closes.
+- Background device polling no longer resurrects an intentionally stopped ADB server.
+- Added ESLint validation and VSIX packaging support.
+
 ## [1.0.0] - 2026-07-14
 
 ### Changed
@@ -41,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Notifications:** Real-time VS Code native toast notifications for device connections, disconnections, and RSA authorization changes.
 - **Command Log Terminal:** Integrated terminal view in the sidebar to track all raw CLI commands executed by AdbZen and their outputs.
 
-[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.2...v1.0.0
 [0.0.2]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/tanishqmudaliar/AdbZen/releases/tag/v0.0.1

@@ -2,7 +2,7 @@
   "name": "adbzen",
   "displayName": "AdbZen",
   "description": "A streamlined GUI for ADB that lets you manage connections, pair devices wirelessly, and access shell commands directly from VS Code.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "tanishqmudaliar",
   "icon": "media/icon.png",
   "repository": {
