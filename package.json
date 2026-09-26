@@ -59,7 +59,7 @@
     "package": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify"
   },
   "devDependencies": {
-    "@types/node": "^20.19.41",
+    "@types/node": "^26.6.2",
     "@types/qrcode": "^1.5.6",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.28.1",
