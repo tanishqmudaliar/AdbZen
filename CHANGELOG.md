@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-26
+
+### Added
+
+- Automatic VS Code Marketplace publishing for tagged releases.
+- Release notes generated directly from the matching changelog section.
+
+### Fixed
+
+- Manual release runs now correctly use the selected version tag when creating a GitHub Release.
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
@@ -53,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Notifications:** Real-time VS Code native toast notifications for device connections, disconnections, and RSA authorization changes.
 - **Command Log Terminal:** Integrated terminal view in the sidebar to track all raw CLI commands executed by AdbZen and their outputs.
 
-[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.2...v1.0.0
 [0.0.2]: https://github.com/tanishqmudaliar/AdbZen/compare/v0.0.1...v0.0.2
