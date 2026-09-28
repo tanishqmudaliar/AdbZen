@@ -1,4 +1,5 @@
 import * as net from "net";
+import { randomInt } from "crypto";
 import * as vscode from "vscode";
 import { getAdbDevices, run, scanAdbPorts } from "./adb.js";
 import { notify, notifyWithActions, withProgress } from "./extension.js";
@@ -146,9 +147,7 @@ export class WirelessViewProvider implements vscode.WebviewViewProvider {
   private async _startQrFlow() {
     this._stopMdns();
 
-    const password = Math.floor(Math.random() * 1_000_000)
-      .toString()
-      .padStart(6, "0");
+    const password = randomInt(0, 1_000_000).toString().padStart(6, "0");
     const payload = `WIFI:T:ADB;S:${QR_SERVICE_NAME};P:${password};;`;
 
     let dataUrl: string;
