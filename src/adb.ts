@@ -50,16 +50,13 @@ let intentionalStop = false;
 
 export function run(cmd: string): Promise<ExecResult> {
   return new Promise((resolve) => {
-    exec(
-      cmd,
-      (err: (Error & { code?: number | null }) | null, stdout, stderr) => {
-        resolve({
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-          code: err?.code ?? 0,
-        });
-      },
-    );
+    exec(cmd, (err, stdout, stderr) => {
+      resolve({
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        code: typeof err?.code === "number" ? err.code : err ? 1 : 0,
+      });
+    });
   });
 }
 
